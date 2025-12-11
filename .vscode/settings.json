@@ -1,0 +1,9 @@
+{
+    "projectColorizer.workspaceColor": "#5a2aac",
+    "workbench.colorCustomizations": {
+        "titleBar.activeBackground": "#5a2aac",
+        "titleBar.activeForeground": "#FFFFFF",
+        "titleBar.inactiveBackground": "#4b2c7f",
+        "titleBar.inactiveForeground": "#FFFFFFb3"
+    }
+}

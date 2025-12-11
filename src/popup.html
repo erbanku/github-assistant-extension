@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            width: 380px;
+            padding: 16px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            background: #f6f8fa;
+            margin: 0;
+        }
+
+        .popup-header {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #24292f;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .popup-content {
+            font-size: 13px;
+            line-height: 1.6;
+            color: #57606a;
+        }
+
+        .setup-section {
+            background: white;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        .input-group {
+            margin-bottom: 12px;
+        }
+
+        label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #24292f;
+            margin-bottom: 6px;
+        }
+
+        input[type="password"],
+        input[type="text"] {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            font-size: 13px;
+            box-sizing: border-box;
+            font-family: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #0969da;
+            box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.1);
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 8px 16px;
+            background-color: #238636;
+            color: white;
+            border: 1px solid rgba(27, 31, 36, 0.15);
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            text-decoration: none;
+            text-align: center;
+            transition: background-color 0.2s;
+        }
+
+        .btn:hover {
+            background-color: #2ea043;
+        }
+
+        .btn-secondary {
+            background-color: #f6f8fa;
+            color: #24292f;
+            border: 1px solid #d0d7de;
+        }
+
+        .btn-secondary:hover {
+            background-color: #f3f4f6;
+        }
+
+        .btn-block {
+            display: block;
+            width: 100%;
+            box-sizing: border-box;
+            margin-bottom: 8px;
+        }
+
+        .status {
+            display: none;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            font-size: 13px;
+        }
+
+        .status.success {
+            background-color: #dafbe1;
+            color: #0969da;
+            border: 1px solid #2da44e;
+            display: block;
+        }
+
+        .status.error {
+            background-color: #ffebe9;
+            color: #cf222e;
+            border: 1px solid #cf222e;
+            display: block;
+        }
+
+        .help-text {
+            font-size: 12px;
+            color: #57606a;
+            margin-top: 6px;
+            line-height: 1.5;
+        }
+
+        .permissions-list {
+            background: #f6f8fa;
+            border-radius: 6px;
+            padding: 12px;
+            margin: 12px 0;
+            font-size: 12px;
+        }
+
+        .permissions-list strong {
+            color: #24292f;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        .permissions-list ul {
+            margin: 0;
+            padding-left: 20px;
+            color: #57606a;
+        }
+
+        .permissions-list li {
+            margin: 4px 0;
+        }
+
+        #configured-view {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="popup-header">
+        <svg width="20" height="20" viewBox="0 0 16 16" fill="#238636">
+            <path
+                d="M5 5.372v.878c0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75v-.878a2.25 2.25 0 1 1 1.5 0v.878a2.25 2.25 0 0 1-2.25 2.25h-1.5v2.128a2.251 2.251 0 1 1-1.5 0V8.5h-1.5A2.25 2.25 0 0 1 3.5 6.25v-.878a2.25 2.25 0 1 1 1.5 0ZM5 3.25a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Zm6.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm-3 8.75a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Z">
+            </path>
+        </svg>
+        Go to Fork Setup
+    </div>
+
+    <div id="status" class="status"></div>
+
+    <div id="setup-view">
+        <div class="setup-section">
+            <div class="input-group">
+                <label for="token">GitHub Personal Access Token</label>
+                <input type="password" id="token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
+                <div class="help-text">
+                    Required to check your repositories and organizations for forks.
+                </div>
+            </div>
+
+            <div class="permissions-list">
+                <strong>Required Permissions (minimum):</strong>
+                <ul>
+                    <li><code>public_repo</code> - Access public repositories</li>
+                    <li><code>read:org</code> - Read organization membership</li>
+                </ul>
+            </div>
+
+            <button id="save-btn" class="btn btn-block">Save Token</button>
+            <a href="https://github.com/settings/tokens/new?scopes=public_repo,read:org&description=Go%20to%20Fork%20Extension"
+                target="_blank" class="btn btn-secondary btn-block">
+                Generate Token on GitHub
+            </a>
+        </div>
+
+        <div class="popup-content">
+            <p><strong>How to set up:</strong></p>
+            <ol style="padding-left: 20px; margin: 8px 0;">
+                <li>Click "Generate Token on GitHub"</li>
+                <li>Click the green "Generate token" button at the bottom</li>
+                <li>Copy the generated token</li>
+                <li>Paste it above and click "Save Token"</li>
+            </ol>
+        </div>
+    </div>
+
+    <div id="configured-view">
+        <div class="setup-section">
+            <p style="color: #0969da; margin: 0 0 12px 0;">✓ Extension is configured and ready!</p>
+            <p style="font-size: 13px; color: #57606a; margin: 0 0 16px 0;">
+                Navigate to repository you've forked to see the button.
+            </p>
+            <button id="change-token-btn" class="btn btn-secondary btn-block">Change Token</button>
+            <button id="remove-token-btn" class="btn btn-secondary btn-block" style="color: #cf222e;">Remove
+                Token</button>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>
