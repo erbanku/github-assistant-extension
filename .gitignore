@@ -1,3 +1,4 @@
 store-assets/
 .vscode/**
 misc/
+.vscode/private-folder-alias.json

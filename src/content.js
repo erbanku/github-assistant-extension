@@ -1,123 +1,424 @@
-// Run when page loads
-init();
+// GitHub has deprecated the import API endpoint.
+// Now we redirect users to GitHub's official import tool.
+function handleImportRepo(owner, repo, repoData, currentUser, githubToken) {
+    // Store import data in sessionStorage for the import page to read
+    sessionStorage.setItem(
+        "gh_import_data",
+        JSON.stringify({
+            url: repoData.clone_url,
+            name: repo,
+            description: repoData.description || "",
+            private: repoData.private,
+            username: currentUser,
+            token: githubToken,
+            timestamp: Date.now(),
+        })
+    );
 
-// Listen for GitHub's soft navigation (SPA-style page changes)
+    // Redirect to GitHub's import page with just the URL
+    const importUrl = `https://github.com/new/import`;
+    window.location.href = importUrl;
+}
+
+async function init() {
+    const parsedUrl = parseGitHubUrl(location.href);
+    if (!parsedUrl) return;
+
+    const { owner, repo } = parsedUrl;
+
+    // Get the GitHub token from storage
+    chrome.storage.sync.get(["githubToken"], async function (result) {
+        const githubToken = result.githubToken;
+        if (!githubToken) {
+            console.log("Go to Fork: No GitHub token found");
+            return;
+        }
+
+        // Fetch user info and repo data in parallel for faster loading
+        const [userResp, repoResp] = await Promise.all([
+            fetch("https://api.github.com/user", {
+                headers: {
+                    Accept: "application/vnd.github.v3+json",
+                    Authorization: `token ${githubToken}`,
+                },
+            }),
+            fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+                headers: {
+                    Accept: "application/vnd.github.v3+json",
+                    Authorization: `token ${githubToken}`,
+                },
+            }),
+        ]);
+
+        if (!userResp.ok || !repoResp.ok) return;
+
+        const [userData, repoData] = await Promise.all([
+            userResp.json(),
+            repoResp.json(),
+        ]);
+
+        const currentUser = userData.login;
+
+        // Check if current repo is a fork and show "Back to Upstream" button
+        if (repoData.fork && repoData.parent) {
+            const upstreamUrl = repoData.parent.html_url;
+            const upstreamFullName = repoData.parent.full_name;
+            addUpstreamButton(upstreamUrl, upstreamFullName);
+        }
+
+        // Determine the upstream/source repository for finding user's forks
+        let sourceOwner = owner;
+        let sourceRepo = repo;
+
+        if (repoData.fork && repoData.source) {
+            sourceOwner = repoData.source.owner.login;
+            sourceRepo = repoData.source.name;
+        }
+
+        // Only show "Go to Fork" and import buttons if we're NOT on our own repo
+        if (owner !== currentUser) {
+            // Find all forks owned by the user
+            const forks = await findAllForks(
+                currentUser,
+                sourceOwner,
+                sourceRepo,
+                githubToken
+            );
+
+            if (forks.length > 0) {
+                addForkButton(forks);
+            }
+
+            // Show import button for repos not owned by user
+            console.log(
+                `Go to Fork: Showing import button for ${owner}/${repo}`
+            );
+            addImportButton(owner, repo, repoData, currentUser, githubToken);
+        }
+    });
+}
+
+function parseGitHubUrl(url) {
+    const match = url.match(/github\.com\/([^\/]+)\/([^\/]+)/);
+    if (!match) return null;
+
+    const owner = match[1];
+    const repo = match[2].replace(/[?#].*$/, ""); // Remove query params and hash
+
+    // Exclude special GitHub pages (not actual repositories)
+    const excludedOwners = [
+        "new",
+        "settings",
+        "organizations",
+        "enterprises",
+        "team",
+        "orgs",
+        "marketplace",
+        "explore",
+        "topics",
+        "trending",
+        "collections",
+        "events",
+        "codespaces",
+        "features",
+        "sponsors",
+        "about",
+        "customer-stories",
+        "pricing",
+        "resources",
+        "security",
+    ];
+    if (excludedOwners.includes(owner.toLowerCase())) {
+        return null;
+    }
+
+    return {
+        owner: owner,
+        repo: repo,
+    };
+}
+
+// Auto-fill import form if we're on the import page
+function autofillImportForm() {
+    // Check if we're on the import page
+    if (!location.pathname.includes("/new/import")) return;
+
+    // Get stored import data
+    const importDataStr = sessionStorage.getItem("gh_import_data");
+    if (!importDataStr) {
+        console.log("Go to Fork: No import data found in sessionStorage");
+        return;
+    }
+
+    const importData = JSON.parse(importDataStr);
+
+    // Check if data is recent (within 30 seconds)
+    if (Date.now() - importData.timestamp > 30000) {
+        console.log("Go to Fork: Import data expired");
+        sessionStorage.removeItem("gh_import_data");
+        return;
+    }
+
+    console.log("Go to Fork: Auto-filling import form with data:", importData);
+
+    // Add a helpful banner
+    const addBanner = () => {
+        if (document.getElementById("import-autofill-banner")) return;
+
+        const banner = document.createElement("div");
+        banner.id = "import-autofill-banner";
+        banner.style.cssText = `
+            background: linear-gradient(135deg, #6639ba 0%, #7c52cc 100%);
+            color: white;
+            padding: 20px 24px;
+            border-radius: 8px;
+            margin: 24px auto;
+            margin-bottom: 300px;
+            max-width: 900px;
+            font-size: 16px;
+            font-weight: 500;
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+            border: 2px solid #8b5cf6;
+            box-shadow: 0 4px 12px rgba(102, 57, 186, 0.3);
+        `;
+
+        banner.innerHTML = `
+            <svg width="24" height="24" viewBox="0 0 16 16" fill="currentColor" style="flex-shrink: 0; margin-top: 2px;">
+                <path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path>
+            </svg>
+            <div style="flex: 1;">
+                <div style="font-size: 15px; line-height: 1.6; margin-bottom: ${
+                    importData.private ? "12px" : "0"
+                };">
+                    Please set the repository owner, name and visibility<br/>
+                </div>
+                ${
+                    importData.private
+                        ? '<div style="font-size: 17px; line-height: 1.5; background: rgba(255, 215, 0, 0.15); padding: 10px 12px; border-radius: 6px; border-left: 3px solid #ffd700;"><strong style="color: #ffd700;">⚠️ PRIVATE REPOSITORY AHEAD:</strong> You must enter your GitHub username and Personal Access Token below to import this private repository!</div>'
+                        : ""
+                }
+            </div>
+        `;
+
+        // Find the button container and insert banner right after it
+        const buttonContainer =
+            document.querySelector(
+                '[data-direction="horizontal"][data-justify="end"]'
+            ) ||
+            document
+                .querySelector('button[type="submit"]')
+                ?.closest('[data-direction="horizontal"]');
+
+        if (buttonContainer) {
+            // Insert right after the button container
+            buttonContainer.parentNode.insertBefore(
+                banner,
+                buttonContainer.nextSibling
+            );
+        } else {
+            // Fallback: append to content area
+            const contentArea =
+                document.querySelector("main") ||
+                document.querySelector('[role="main"]') ||
+                document.querySelector(".application-main") ||
+                document.querySelector("body");
+
+            if (contentArea) {
+                contentArea.appendChild(banner);
+            } else {
+                document.body.appendChild(banner);
+            }
+        }
+
+        // Copy URL to clipboard
+        navigator.clipboard.writeText(importData.url).catch(() => {});
+    };
+
+    // Show banner immediately
+    addBanner();
+
+    // Wait for form to load and fill it
+    const fillForm = () => {
+        let filled = false;
+
+        // Find all input fields for debugging
+        const allInputs = document.querySelectorAll(
+            'input[type="text"], input[type="url"], input:not([type])'
+        );
+        console.log(
+            "Go to Fork: Found input fields:",
+            Array.from(allInputs).map((i) => ({
+                name: i.name,
+                id: i.id,
+                type: i.type,
+                placeholder: i.placeholder,
+            }))
+        );
+
+        // Fill the clone URL field - try multiple selectors
+        const urlInput =
+            document.querySelector('input[name="vcs_url"]') ||
+            document.querySelector("input#vcs_url") ||
+            document.querySelector('input[name="import_url"]') ||
+            document.querySelector('input[type="url"]') ||
+            document.querySelector('input[placeholder*="Clone URL"]') ||
+            document.querySelector('input[placeholder*="repository"]') ||
+            document.querySelector('input[placeholder*="https://"]') ||
+            Array.from(allInputs).find((input) => {
+                const label = input.labels?.[0]?.textContent || "";
+                const placeholder = input.placeholder || "";
+                const ariaLabel = input.getAttribute("aria-label") || "";
+                return (
+                    label.toLowerCase().includes("url") ||
+                    label.toLowerCase().includes("clone") ||
+                    placeholder.toLowerCase().includes("url") ||
+                    ariaLabel.toLowerCase().includes("url")
+                );
+            });
+
+        if (urlInput) {
+            console.log("Go to Fork: Found URL input:", urlInput);
+            // Use native setter to bypass React
+            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                window.HTMLInputElement.prototype,
+                "value"
+            ).set;
+            nativeInputValueSetter.call(urlInput, importData.url);
+
+            urlInput.dispatchEvent(new Event("input", { bubbles: true }));
+            urlInput.dispatchEvent(new Event("change", { bubbles: true }));
+            urlInput.dispatchEvent(new Event("blur", { bubbles: true }));
+            urlInput.focus();
+            filled = true;
+        } else {
+            console.log("Go to Fork: URL input not found");
+        }
+
+        // Fill repository name
+        const nameInput =
+            document.querySelector('input[name="repository_name"]') ||
+            document.querySelector("input#repository_name") ||
+            document.querySelector('input[name="name"]');
+
+        if (nameInput) {
+            console.log("Go to Fork: Found name input:", nameInput);
+            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                window.HTMLInputElement.prototype,
+                "value"
+            ).set;
+            nativeInputValueSetter.call(nameInput, importData.name);
+
+            nameInput.dispatchEvent(new Event("input", { bubbles: true }));
+            nameInput.dispatchEvent(new Event("change", { bubbles: true }));
+            nameInput.dispatchEvent(new Event("blur", { bubbles: true }));
+            filled = true;
+        } else {
+            console.log("Go to Fork: Name input not found");
+        }
+
+        // Fill credentials for private repos
+        if (importData.private) {
+            const usernameInput =
+                document.querySelector('input[name="vcs_username"]') ||
+                document.querySelector("input#vcs_username") ||
+                document.querySelector('input[placeholder*="username"]');
+
+            if (usernameInput) {
+                console.log("Go to Fork: Found username input");
+                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                    window.HTMLInputElement.prototype,
+                    "value"
+                ).set;
+                nativeInputValueSetter.call(usernameInput, importData.username);
+                usernameInput.dispatchEvent(
+                    new Event("input", { bubbles: true })
+                );
+                usernameInput.dispatchEvent(
+                    new Event("change", { bubbles: true })
+                );
+                usernameInput.dispatchEvent(
+                    new Event("blur", { bubbles: true })
+                );
+            }
+
+            const passwordInput =
+                document.querySelector('input[name="vcs_password"]') ||
+                document.querySelector("input#vcs_password") ||
+                document.querySelector('input[type="password"]');
+
+            if (passwordInput) {
+                console.log("Go to Fork: Found password input");
+                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                    window.HTMLInputElement.prototype,
+                    "value"
+                ).set;
+                nativeInputValueSetter.call(passwordInput, importData.token);
+                passwordInput.dispatchEvent(
+                    new Event("input", { bubbles: true })
+                );
+                passwordInput.dispatchEvent(
+                    new Event("change", { bubbles: true })
+                );
+                passwordInput.dispatchEvent(
+                    new Event("blur", { bubbles: true })
+                );
+            }
+        }
+
+        if (filled) {
+            console.log("Go to Fork: Form filled successfully");
+            // Clear after successful fill
+            sessionStorage.removeItem("gh_import_data");
+            return true;
+        }
+        return false;
+    };
+
+    // Try to fill immediately
+    if (fillForm()) return;
+
+    // Try again after delays
+    setTimeout(() => fillForm(), 300);
+    setTimeout(() => fillForm(), 800);
+    setTimeout(() => fillForm(), 1500);
+    setTimeout(() => fillForm(), 3000);
+
+    // Also watch for DOM changes
+    const observer = new MutationObserver(() => {
+        if (fillForm()) {
+            observer.disconnect();
+        }
+    });
+
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+    });
+
+    // Stop observing after 5 seconds
+    setTimeout(() => observer.disconnect(), 5000);
+}
+
+// Initialize on page load
+init();
+autofillImportForm();
+
+// Handle GitHub's SPA navigation
 let lastUrl = location.href;
 new MutationObserver(() => {
     const url = location.href;
     if (url !== lastUrl) {
         lastUrl = url;
+        // Remove existing buttons before reinitializing
+        document.getElementById("go-to-fork-container")?.remove();
+        document.getElementById("back-to-upstream-container")?.remove();
+        document.getElementById("import-repo-container")?.remove();
         init();
+        autofillImportForm();
     }
 }).observe(document, { subtree: true, childList: true });
-
-async function init() {
-    // Wait a bit for GitHub's dynamic content to load
-    await new Promise((resolve) => setTimeout(resolve, 300));
-
-    // Remove any existing buttons
-    const existingFork = document.getElementById("go-to-fork-container");
-    if (existingFork) existingFork.remove();
-    const existingUpstream = document.getElementById(
-        "back-to-upstream-container"
-    );
-    if (existingUpstream) existingUpstream.remove();
-
-    const url = window.location.href;
-
-    // Check if we're on a GitHub repo page (matches all repo pages including issues, PRs, files, etc.)
-    const repoMatch = url.match(
-        /^https?:\/\/github\.com\/([^/]+)\/([^/]+)(?:\/|$)/
-    );
-    if (!repoMatch) return;
-
-    const [, owner, repo] = repoMatch;
-
-    // Don't run if missing owner/repo
-    if (!owner || !repo) return;
-
-    try {
-        await injectButtons(owner, repo);
-    } catch (error) {
-        console.log("Go to Fork extension error:", error);
-    }
-}
-
-async function injectButtons(owner, repo) {
-    // Get stored GitHub token
-    const { githubToken } = await chrome.storage.sync.get("githubToken");
-
-    if (!githubToken) {
-        console.log(
-            "Go to Fork: No GitHub token configured. Please click the extension icon to set up."
-        );
-        return;
-    }
-
-    // Get current user info
-    const userResp = await fetch("https://api.github.com/user", {
-        headers: {
-            Accept: "application/vnd.github.v3+json",
-            Authorization: `token ${githubToken}`,
-        },
-    });
-
-    if (!userResp.ok) {
-        console.log(
-            "Go to Fork: Authentication failed. Please check your token in the extension settings."
-        );
-        return;
-    }
-
-    const userData = await userResp.json();
-    const currentUser = userData.login;
-
-    // Get the current repo details
-    const repoResp = await fetch(
-        `https://api.github.com/repos/${owner}/${repo}`,
-        {
-            headers: {
-                Accept: "application/vnd.github.v3+json",
-                Authorization: `token ${githubToken}`,
-            },
-        }
-    );
-
-    if (!repoResp.ok) return;
-
-    const repoData = await repoResp.json();
-
-    // Check if current repo is a fork and show "Back to Upstream" button
-    if (repoData.fork && repoData.parent) {
-        const upstreamUrl = repoData.parent.html_url;
-        const upstreamFullName = repoData.parent.full_name;
-        addUpstreamButton(upstreamUrl, upstreamFullName);
-    }
-
-    // Determine the upstream/source repository for finding user's forks
-    let sourceOwner = owner;
-    let sourceRepo = repo;
-
-    if (repoData.fork && repoData.source) {
-        sourceOwner = repoData.source.owner.login;
-        sourceRepo = repoData.source.name;
-    }
-
-    // Don't show "Go to Fork" button if we're on our own repo
-    if (owner === currentUser) return;
-
-    // Find all forks owned by the user
-    const forks = await findAllForks(
-        currentUser,
-        sourceOwner,
-        sourceRepo,
-        githubToken
-    );
-
-    if (forks.length > 0) {
-        addForkButton(forks);
-    }
-}
 
 async function findAllForks(currentUser, sourceOwner, sourceRepo, githubToken) {
     const forks = [];
@@ -484,5 +785,100 @@ function createUpstreamButtonContainer(upstreamUrl, upstreamFullName) {
     });
     container.appendChild(button);
 
+    return container;
+}
+
+// ===============================================
+// Import Repository Functionality
+// ===============================================
+
+function addImportButton(owner, repo, repoData, currentUser, githubToken) {
+    // Prevent duplicate buttons
+    if (document.getElementById("import-repo-container")) return;
+
+    const repoHeader =
+        document.querySelector(".AppHeader-context-full") ||
+        document.querySelector(".AppHeader") ||
+        document.querySelector("header");
+
+    if (!repoHeader) {
+        console.log("Go to Fork: Could not find header for import button");
+        return;
+    }
+
+    const container = createImportButtonContainer(
+        owner,
+        repo,
+        repoData,
+        currentUser,
+        githubToken
+    );
+
+    container.style.marginLeft = "16px";
+    container.style.display = "inline-block";
+
+    repoHeader.appendChild(container);
+    console.log("Go to Fork: Import button added successfully");
+}
+
+function createImportButtonContainer(
+    owner,
+    repo,
+    repoData,
+    currentUser,
+    githubToken
+) {
+    const container = document.createElement("div");
+    container.id = "import-repo-container";
+    container.style.cssText = `
+        display: inline-flex;
+        align-items: center;
+        gap: 0;
+        position: relative;
+        margin-right: 8px;
+        vertical-align: middle;
+    `;
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "btn btn-sm";
+    button.style.cssText = `
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 5px 12px;
+        background-color: #6639ba;
+        color: white !important;
+        border: 1px solid rgba(27, 31, 36, 0.15);
+        border-radius: 6px;
+        text-decoration: none;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        white-space: nowrap;
+        line-height: 20px;
+    `;
+
+    button.innerHTML = `
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M1 2.5A2.5 2.5 0 0 1 3.5 0h8.75a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0V1.5h-8a1 1 0 0 0-1 1v6.708A2.493 2.493 0 0 1 3.5 9h3.25a.75.75 0 0 1 0 1.5H3.5a1 1 0 0 0 0 2h5.75a.75.75 0 0 1 0 1.5H3.5A2.5 2.5 0 0 1 1 11.5Zm13.23 7.79h-.001l-1.224-1.224v6.184a.75.75 0 0 1-1.5 0V9.066L10.28 10.29a.75.75 0 0 1-1.06-1.061l2.505-2.504a.75.75 0 0 1 1.06 0L15.29 9.23a.751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018Z"></path>
+        </svg>
+        Import Repository
+    `;
+
+    button.title = `Import ${owner}/${repo} to your account`;
+
+    button.addEventListener("mouseover", () => {
+        button.style.backgroundColor = "#7c52cc";
+    });
+    button.addEventListener("mouseout", () => {
+        button.style.backgroundColor = "#6639ba";
+    });
+
+    button.addEventListener("click", () => {
+        handleImportRepo(owner, repo, repoData, currentUser, githubToken);
+    });
+
+    container.appendChild(button);
     return container;
 }

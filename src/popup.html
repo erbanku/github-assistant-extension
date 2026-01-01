@@ -178,20 +178,23 @@
                 <label for="token">GitHub Personal Access Token</label>
                 <input type="password" id="token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
                 <div class="help-text">
-                    Required to check your repositories and organizations for forks.
+                    Required for navigation and importing repositories to your account.
                 </div>
             </div>
 
             <div class="permissions-list">
-                <strong>Required Permissions (minimum):</strong>
+                <strong>Required Permissions:</strong>
                 <ul>
-                    <li><code>public_repo</code> - Access public repositories</li>
+                    <li><code>repo</code> - Full control of private repositories (needed to import repos)</li>
                     <li><code>read:org</code> - Read organization membership</li>
                 </ul>
+                <div style="margin-top: 8px; font-size: 11px; color: #8b949e;">
+                    ⚠️ Use <code>repo</code> (not just <code>public_repo</code>) to enable repository imports
+                </div>
             </div>
 
             <button id="save-btn" class="btn btn-block">Save Token</button>
-            <a href="https://github.com/settings/tokens/new?scopes=public_repo,read:org&description=Go%20to%20Fork%20Extension"
+            <a href="https://github.com/settings/tokens/new?scopes=repo,read:org&description=Go%20to%20Fork%20Extension"
                 target="_blank" class="btn btn-secondary btn-block">
                 Generate Token on GitHub
             </a>
