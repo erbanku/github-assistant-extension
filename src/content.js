@@ -1,3 +1,39 @@
+// Cache for quick access links to avoid repeated storage reads
+let cachedQuickAccessLinks = null;
+let cachedGithubToken = null;
+
+// Load quick access links into cache
+async function loadQuickAccessLinksCache() {
+    const result = await new Promise((resolve) => {
+        chrome.storage.sync.get(["quickAccessLinks"], resolve);
+    });
+    cachedQuickAccessLinks = result.quickAccessLinks || [];
+}
+
+// Load GitHub token into cache
+async function loadGithubTokenCache() {
+    const result = await new Promise((resolve) => {
+        chrome.storage.sync.get(["githubToken"], resolve);
+    });
+    cachedGithubToken = result.githubToken || null;
+}
+
+// Listen for storage changes to update cache
+chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === "sync") {
+        if (changes.quickAccessLinks) {
+            cachedQuickAccessLinks = changes.quickAccessLinks.newValue || [];
+            // Re-inject buttons with new settings
+            injectQuickAccessButtons();
+        }
+        if (changes.githubToken) {
+            cachedGithubToken = changes.githubToken.newValue || null;
+            // Re-initialize to update fork/upstream/import buttons
+            init();
+        }
+    }
+});
+
 // GitHub has deprecated the import API endpoint.
 // Now we redirect users to GitHub's official import tool.
 function handleImportRepo(owner, repo, repoData, currentUser, githubToken) {
@@ -20,20 +56,160 @@ function handleImportRepo(owner, repo, repoData, currentUser, githubToken) {
     window.location.href = importUrl;
 }
 
+// Inject quick access buttons for custom links
+async function injectQuickAccessButtons() {
+    // Don't inject on raw pages
+    if (
+        window.location.hostname.includes("raw.githubusercontent.com") ||
+        window.location.hostname.includes("gist.githubusercontent.com")
+    ) {
+        return;
+    }
+
+    // Remove existing container if present
+    const existing = document.getElementById("github-assistant-quick-access");
+    if (existing) {
+        existing.remove();
+    }
+
+    // Use cached links if available, otherwise load from storage
+    if (cachedQuickAccessLinks === null) {
+        await loadQuickAccessLinksCache();
+    }
+
+    const links = cachedQuickAccessLinks;
+    const activeLinks = links.filter((link) => link.url);
+
+    if (activeLinks.length === 0) {
+        return;
+    }
+
+    // Find header container
+    let headerContainer = document.querySelector(".AppHeader-context-full");
+    if (!headerContainer) {
+        headerContainer = document.querySelector(".AppHeader-globalBar");
+    }
+    if (!headerContainer) {
+        headerContainer = document.querySelector(".AppHeader");
+    }
+    if (!headerContainer) {
+        headerContainer = document.querySelector("header");
+    }
+
+    if (!headerContainer) {
+        console.log(
+            "GitHub Assistant: Could not find header container for quick access buttons"
+        );
+        return;
+    }
+
+    // Create container for quick access buttons
+    const container = document.createElement("div");
+    container.id = "github-assistant-quick-access";
+    container.style.cssText = `
+        display: inline-flex;
+        gap: 6px;
+        margin-left: 8px;
+        align-items: center;
+    `;
+
+    // Color palette for buttons
+    const colorMap = {
+        blue: {
+            bg: "#ddf4ff",
+            border: "#54aeff",
+            text: "#0969da",
+            hover: "#b6e3ff",
+        },
+        yellow: {
+            bg: "#fff8c5",
+            border: "#d4a72c",
+            text: "#7d4e00",
+            hover: "#fae17d",
+        },
+        green: {
+            bg: "#dcffe4",
+            border: "#4ac26b",
+            text: "#116329",
+            hover: "#aceebb",
+        },
+        purple: {
+            bg: "#fbefff",
+            border: "#d4a5db",
+            text: "#8250df",
+            hover: "#f2d8ff",
+        },
+    };
+
+    // Create buttons for each link
+    activeLinks.forEach((link, index) => {
+        const displayName = link.name || `#${links.indexOf(link) + 1}`;
+        const colorScheme = colorMap[link.color] || colorMap["green"];
+
+        const button = document.createElement("a");
+        button.href = link.url;
+        button.target = "_blank";
+        button.rel = "noopener noreferrer";
+        button.className = "btn btn-sm";
+        button.style.cssText = `
+            background: ${colorScheme.bg};
+            color: ${colorScheme.text};
+            border: 1px solid ${colorScheme.border};
+            padding: 3px 8px;
+            font-size: 12px;
+            text-decoration: none;
+            border-radius: 6px;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: background 0.2s ease;
+            font-weight: bold;
+            text-transform: uppercase;
+        `;
+        button.textContent = displayName;
+        button.title = `Quick access: ${link.url}`;
+
+        button.addEventListener("mouseenter", () => {
+            button.style.background = colorScheme.hover;
+        });
+        button.addEventListener("mouseleave", () => {
+            button.style.background = colorScheme.bg;
+        });
+
+        container.appendChild(button);
+    });
+
+    // Insert after the repo name (append to end of header container)
+    headerContainer.appendChild(container);
+
+    console.log(
+        `GitHub Assistant: Injected ${activeLinks.length} quick access button(s)`
+    );
+}
+
 async function init() {
+    // Inject quick access buttons on all GitHub pages (except raw)
+    await injectQuickAccessButtons();
+
     const parsedUrl = parseGitHubUrl(location.href);
-    if (!parsedUrl) return;
+    if (!parsedUrl) {
+        console.log("Go to Fork: Could not parse GitHub URL");
+        return;
+    }
 
     const { owner, repo } = parsedUrl;
 
-    // Get the GitHub token from storage
-    chrome.storage.sync.get(["githubToken"], async function (result) {
-        const githubToken = result.githubToken;
-        if (!githubToken) {
-            console.log("Go to Fork: No GitHub token found");
-            return;
-        }
+    // Use cached GitHub token if available, otherwise load from storage
+    if (cachedGithubToken === null) {
+        await loadGithubTokenCache();
+    }
 
+    const githubToken = cachedGithubToken;
+    if (!githubToken) {
+        console.log("Go to Fork: No GitHub token found");
+        return;
+    }
+
+    try {
         // Fetch user info and repo data in parallel for faster loading
         const [userResp, repoResp] = await Promise.all([
             fetch("https://api.github.com/user", {
@@ -50,7 +226,12 @@ async function init() {
             }),
         ]);
 
-        if (!userResp.ok || !repoResp.ok) return;
+        if (!userResp.ok || !repoResp.ok) {
+            console.log(
+                `Go to Fork: API request failed (user: ${userResp.status}, repo: ${repoResp.status})`
+            );
+            return;
+        }
 
         const [userData, repoData] = await Promise.all([
             userResp.json(),
@@ -94,8 +275,14 @@ async function init() {
                 `Go to Fork: Showing import button for ${owner}/${repo}`
             );
             addImportButton(owner, repo, repoData, currentUser, githubToken);
+        } else {
+            console.log(
+                `Go to Fork: Skipping import button (own repo: ${owner}/${repo})`
+            );
         }
-    });
+    } catch (error) {
+        console.error("Go to Fork: Error in init():", error);
+    }
 }
 
 function parseGitHubUrl(url) {
@@ -618,19 +805,54 @@ init();
 autofillImportForm();
 initRawPage();
 
-// Handle GitHub's SPA navigation
+// Handle GitHub's SPA navigation with better detection
 let lastUrl = location.href;
-new MutationObserver(() => {
+
+// Use both pushState/replaceState interception and MutationObserver
+const originalPushState = history.pushState;
+const originalReplaceState = history.replaceState;
+
+function handleNavigation() {
     const url = location.href;
     if (url !== lastUrl) {
+        console.log(
+            `Go to Fork: Navigation detected from ${lastUrl} to ${url}`
+        );
         lastUrl = url;
+
         // Remove existing buttons before reinitializing
         document.getElementById("go-to-fork-container")?.remove();
         document.getElementById("back-to-upstream-container")?.remove();
         document.getElementById("import-repo-container")?.remove();
-        init();
-        autofillImportForm();
+        document.getElementById("github-assistant-quick-access")?.remove();
+
+        // Reinitialize immediately with minimal delay
+        setTimeout(async () => {
+            console.log("Go to Fork: Reinitializing after navigation...");
+            await init();
+            autofillImportForm();
+        }, 50);
     }
+}
+
+history.pushState = function (...args) {
+    originalPushState.apply(this, args);
+    handleNavigation();
+};
+
+history.replaceState = function (...args) {
+    originalReplaceState.apply(this, args);
+    handleNavigation();
+};
+
+// Also listen for popstate (back/forward buttons)
+window.addEventListener("popstate", handleNavigation);
+
+// Fallback MutationObserver for any missed navigations
+let mutationTimeout;
+new MutationObserver(() => {
+    clearTimeout(mutationTimeout);
+    mutationTimeout = setTimeout(handleNavigation, 100);
 }).observe(document, { subtree: true, childList: true });
 
 async function findAllForks(currentUser, sourceOwner, sourceRepo, githubToken) {

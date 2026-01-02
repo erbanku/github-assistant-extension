@@ -157,6 +157,54 @@
         #configured-view {
             display: none;
         }
+
+        .quick-link-item {
+            margin-bottom: 10px;
+            padding: 10px;
+            background: #f6f8fa;
+            border-radius: 6px;
+            border: 1px solid #d0d7de;
+        }
+
+        .quick-link-item input {
+            margin-bottom: 6px;
+        }
+
+        .quick-link-item input:last-child {
+            margin-bottom: 0;
+        }
+
+        .quick-link-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: #57606a;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+        }
+
+        .configured-link-item {
+            padding: 8px;
+            background: #f6f8fa;
+            border-radius: 6px;
+            margin-bottom: 6px;
+            font-size: 12px;
+        }
+
+        .configured-link-item strong {
+            color: #24292f;
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .configured-link-item a {
+            color: #0969da;
+            text-decoration: none;
+            word-break: break-all;
+        }
+
+        .configured-link-item a:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 
@@ -173,7 +221,7 @@
     <div id="status" class="status"></div>
 
     <div id="setup-view">
-        <div class="setup-section">
+        <div id="token-section" class="setup-section">
             <div class="input-group">
                 <label for="token">GitHub Personal Access Token</label>
                 <input type="password" id="token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
@@ -200,6 +248,14 @@
             </a>
         </div>
 
+        <div id="links-section" class="setup-section">
+            <label>Quick Access Links (Optional)</label>
+            <div class="help-text" style="margin-bottom: 12px;">
+                Add up to 5 custom GitHub links for quick access on any GitHub page.
+            </div>
+            <div id="quick-links-container"></div>
+        </div>
+
         <div class="popup-content">
             <p><strong>How to set up:</strong></p>
             <ol style="padding-left: 20px; margin: 8px 0;">
@@ -220,6 +276,12 @@
             <button id="change-token-btn" class="btn btn-secondary btn-block">Change Token</button>
             <button id="remove-token-btn" class="btn btn-secondary btn-block" style="color: #cf222e;">Remove
                 Token</button>
+        </div>
+        <div class="setup-section">
+            <label>Quick Access Links</label>
+            <div id="configured-links-container" style="margin-top: 8px;"></div>
+            <button id="edit-links-btn" class="btn btn-secondary btn-block" style="margin-top: 12px;">Edit
+                Links</button>
         </div>
     </div>
 
