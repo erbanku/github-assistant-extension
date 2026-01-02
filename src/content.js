@@ -402,8 +402,221 @@ function autofillImportForm() {
 }
 
 // Initialize on page load
+// ===== RAW PAGE HANDLERS =====
+
+/**
+ * Parse gist raw URL and return the gist page URL with file anchor
+ * Example: https://gist.githubusercontent.com/erbanku/cd468880461ddcce95e44da10b921262/raw/51ddada9e85be5b27426bcac66e80dab01815541/dify_workflows_export_EN.js
+ * Returns: https://gist.github.com/erbanku/cd468880461ddcce95e44da10b921262#file-dify_workflows_export_en-js
+ */
+function parseGistRawUrl(url) {
+    const match = url.match(
+        /gist\.githubusercontent\.com\/([^\/]+)\/([^\/]+)\/raw\/[^\/]+\/(.+)$/
+    );
+    if (!match) return null;
+
+    const username = match[1];
+    const gistId = match[2];
+    const filename = match[3];
+
+    // Convert filename to gist anchor format
+    // GitHub converts filenames to lowercase and replaces dots with hyphens (except extension dot becomes -)
+    const anchor = "file-" + filename.toLowerCase().replace(/\./g, "-");
+
+    return `https://gist.github.com/${username}/${gistId}#${anchor}`;
+}
+
+/**
+ * Parse repo raw URL and return the file view URL
+ * Example: https://raw.githubusercontent.com/owner/repo/branch/path/to/file.js
+ * Returns: https://github.com/owner/repo/blob/branch/path/to/file.js
+ */
+function parseRepoRawUrl(url) {
+    const match = url.match(
+        /raw\.githubusercontent\.com\/([^\/]+)\/([^\/]+)\/([^\/]+)\/(.+)/
+    );
+    if (!match) return null;
+
+    const owner = match[1];
+    const repo = match[2];
+    const branch = match[3];
+    const filePath = match[4];
+
+    return `https://github.com/${owner}/${repo}/blob/${branch}/${filePath}`;
+}
+
+/**
+ * Add a "Go to Gist/File" button in the upper right corner of raw pages
+ */
+function addRawPageButton(targetUrl, buttonText) {
+    // Remove existing button if present
+    document.getElementById("go-to-source-container")?.remove();
+
+    const container = document.createElement("div");
+    container.id = "go-to-source-container";
+    container.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+        display: flex;
+        gap: 8px;
+    `;
+
+    // Go to Gist/File button
+    const button = document.createElement("button");
+    button.style.cssText = `
+        padding: 8px 16px;
+        background-color: #238636;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+        transition: background-color 0.2s;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    `;
+
+    button.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Zm9.78-2.22-5.5 5.5a.749.749 0 0 1-1.275-.326.749.749 0 0 1 .215-.734l5.5-5.5a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042Z"></path>
+        </svg>
+        ${buttonText}
+    `;
+
+    button.title = `Navigate to ${buttonText.toLowerCase()}`;
+
+    button.addEventListener("mouseover", () => {
+        button.style.backgroundColor = "#2ea043";
+    });
+    button.addEventListener("mouseout", () => {
+        button.style.backgroundColor = "#238636";
+    });
+
+    button.addEventListener("click", () => {
+        window.location.href = targetUrl;
+    });
+
+    // Copy All button
+    const copyButton = document.createElement("button");
+    copyButton.style.cssText = `
+        padding: 8px 16px;
+        background-color: #0969da;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+        transition: background-color 0.2s;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    `;
+
+    copyButton.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"></path>
+            <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"></path>
+        </svg>
+        Copy All
+    `;
+
+    copyButton.title = "Copy all content to clipboard";
+
+    copyButton.addEventListener("mouseover", () => {
+        copyButton.style.backgroundColor = "#0860ca";
+    });
+    copyButton.addEventListener("mouseout", () => {
+        copyButton.style.backgroundColor = "#0969da";
+    });
+
+    copyButton.addEventListener("click", async () => {
+        try {
+            // Get all text content from the page
+            const content =
+                document.body.innerText || document.body.textContent;
+
+            await navigator.clipboard.writeText(content);
+
+            // Visual feedback - change button temporarily
+            const originalHTML = copyButton.innerHTML;
+            copyButton.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"></path>
+                </svg>
+                Copied!
+            `;
+            copyButton.style.backgroundColor = "#1a7f37";
+
+            setTimeout(() => {
+                copyButton.innerHTML = originalHTML;
+                copyButton.style.backgroundColor = "#0969da";
+            }, 2000);
+        } catch (err) {
+            console.error("Go to Fork: Failed to copy content:", err);
+
+            // Show error feedback
+            const originalHTML = copyButton.innerHTML;
+            copyButton.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M2.343 13.657A8 8 0 1 1 13.657 2.343 8 8 0 0 1 2.343 13.657ZM6.03 4.97a.751.751 0 0 0-1.042.018.751.751 0 0 0-.018 1.042L6.94 8 4.97 9.97a.749.749 0 0 0 .326 1.275.749.749 0 0 0 .734-.215L8 9.06l1.97 1.97a.749.749 0 0 0 1.275-.326.749.749 0 0 0-.215-.734L9.06 8l1.97-1.97a.749.749 0 0 0-.326-1.275.749.749 0 0 0-.734.215L8 6.94Z"></path>
+                </svg>
+                Failed
+            `;
+            copyButton.style.backgroundColor = "#cf222e";
+
+            setTimeout(() => {
+                copyButton.innerHTML = originalHTML;
+                copyButton.style.backgroundColor = "#0969da";
+            }, 2000);
+        }
+    });
+
+    container.appendChild(button);
+    container.appendChild(copyButton);
+    document.body.appendChild(container);
+}
+
+/**
+ * Initialize raw page handler - detects if we're on a raw page and adds appropriate button
+ */
+function initRawPage() {
+    const currentUrl = location.href;
+
+    // Check if we're on a gist raw page
+    if (currentUrl.includes("gist.githubusercontent.com")) {
+        const gistUrl = parseGistRawUrl(currentUrl);
+        if (gistUrl) {
+            console.log("Go to Fork: Detected gist raw page, adding button");
+            addRawPageButton(gistUrl, "Go to Gist");
+        }
+        return;
+    }
+
+    // Check if we're on a repo raw page
+    if (currentUrl.includes("raw.githubusercontent.com")) {
+        const fileUrl = parseRepoRawUrl(currentUrl);
+        if (fileUrl) {
+            console.log("Go to Fork: Detected repo raw page, adding button");
+            addRawPageButton(fileUrl, "Go to File");
+        }
+        return;
+    }
+}
+
+// ===== END RAW PAGE HANDLERS =====
+
 init();
 autofillImportForm();
+initRawPage();
 
 // Handle GitHub's SPA navigation
 let lastUrl = location.href;

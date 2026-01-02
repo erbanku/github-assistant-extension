@@ -1,18 +1,28 @@
 {
     "manifest_version": 3,
-    "name": "GitHub Go to Fork",
-    "version": "1.1.0",
-    "description": "Shows a link to your forked repository when viewing the upstream repository",
+    "name": "GitHub Assistant",
+    "version": "1.2.0",
+    "description": "Navigate between forks and upstream repos, import repositories, and quickly access/copy raw files from GitHub and Gists",
     "permissions": [ "storage" ],
     "host_permissions": [
         "https://api.github.com/*",
-        "https://github.com/*"
+        "https://github.com/*",
+        "https://raw.githubusercontent.com/*",
+        "https://gist.githubusercontent.com/*"
     ],
     "content_scripts": [
         {
             "matches": [ "https://github.com/*" ],
             "js": [ "content.js" ],
             "run_at": "document_idle"
+        },
+        {
+            "matches": [
+                "https://raw.githubusercontent.com/*",
+                "https://gist.githubusercontent.com/*"
+            ],
+            "js": [ "content.js" ],
+            "run_at": "document_end"
         }
     ],
     "action": {
