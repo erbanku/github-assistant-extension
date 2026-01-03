@@ -192,7 +192,7 @@ async function injectQuickAccessButtons() {
             background: ${colorScheme.bg};
             color: ${colorScheme.text};
             border: 1px solid ${colorScheme.border};
-            padding: 3px 8px;
+            padding: 3px 4px;
             font-size: 12px;
             text-decoration: none;
             border-radius: 6px;
@@ -1032,7 +1032,7 @@ function addForkButton(forks) {
     const container = createForkButtonContainer(forks);
 
     // Add with some margin to separate from other elements
-    container.style.marginLeft = "16px";
+    container.style.marginLeft = "4px";
     container.style.display = "inline-block";
 
     repoHeader.appendChild(container);
@@ -1047,7 +1047,7 @@ function createForkButtonContainer(forks) {
     align-items: center;
     gap: 0;
     position: relative;
-    margin-right: 8px;
+    margin-right: 4px;
     vertical-align: middle;
   `;
 
@@ -1060,7 +1060,7 @@ function createForkButtonContainer(forks) {
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      padding: 3px 8px;
+      padding: 3px 4px;
       background-color: #238636;
       color: white !important;
       border: 1px solid rgba(27, 31, 36, 0.15);
@@ -1100,7 +1100,7 @@ function createForkButtonContainer(forks) {
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      padding: 3px 8px;
+      padding: 3px 4px;
       background-color: #238636;
       color: white !important;
       border: 1px solid rgba(27, 31, 36, 0.15);
@@ -1244,7 +1244,7 @@ function addUpstreamButton(upstreamUrl, upstreamFullName) {
         upstreamFullName
     );
 
-    container.style.marginLeft = "16px";
+    container.style.marginLeft = "4px";
     container.style.display = "inline-block";
 
     repoHeader.appendChild(container);
@@ -1259,7 +1259,7 @@ function createUpstreamButtonContainer(upstreamUrl, upstreamFullName) {
     align-items: center;
     gap: 0;
     position: relative;
-    margin-right: 8px;
+    margin-right: 4px;
     vertical-align: middle;
   `;
 
@@ -1270,7 +1270,7 @@ function createUpstreamButtonContainer(upstreamUrl, upstreamFullName) {
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      padding: 3px 8px;
+      padding: 3px 4px;
       background-color: #0969da;
       color: white !important;
       border: 1px solid rgba(27, 31, 36, 0.15);
@@ -1328,7 +1328,7 @@ function addImportButton(owner, repo, repoData, currentUser, githubToken) {
         githubToken
     );
 
-    container.style.marginLeft = "16px";
+    container.style.marginLeft = "4px";
     container.style.display = "inline-block";
 
     repoHeader.appendChild(container);
@@ -1349,7 +1349,7 @@ function createImportButtonContainer(
         align-items: center;
         gap: 0;
         position: relative;
-        margin-right: 8px;
+        margin-right: 4px;
         vertical-align: middle;
     `;
 
@@ -1360,7 +1360,7 @@ function createImportButtonContainer(
         display: inline-flex;
         align-items: center;
         gap: 4px;
-        padding: 3px 8px;
+        padding: 3px 4px;
         background-color: #6639ba;
         color: white !important;
         border: 1px solid rgba(27, 31, 36, 0.15);
