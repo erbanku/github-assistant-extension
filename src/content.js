@@ -1,6 +1,15 @@
 // Cache for quick access links to avoid repeated storage reads
 let cachedQuickAccessLinks = null;
 let cachedGithubToken = null;
+let cachedSettings = null;
+
+// Default settings - all features enabled by default
+const DEFAULT_SETTINGS = {
+    showImportButton: true,
+    showQuickAccessLinks: true,
+    showForkUpstreamButtons: true,
+    showRawPageButtons: true,
+};
 
 // Load quick access links into cache
 async function loadQuickAccessLinksCache() {
@@ -18,6 +27,17 @@ async function loadGithubTokenCache() {
     cachedGithubToken = result.githubToken || null;
 }
 
+// Load settings into cache
+async function loadSettingsCache() {
+    const result = await new Promise((resolve) => {
+        chrome.storage.sync.get(["extensionSettings"], resolve);
+    });
+    cachedSettings = {
+        ...DEFAULT_SETTINGS,
+        ...(result.extensionSettings || {}),
+    };
+}
+
 // Listen for storage changes to update cache
 chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === "sync") {
@@ -30,6 +50,15 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
             cachedGithubToken = changes.githubToken.newValue || null;
             // Re-initialize to update fork/upstream/import buttons
             init();
+        }
+        if (changes.extensionSettings) {
+            cachedSettings = {
+                ...DEFAULT_SETTINGS,
+                ...(changes.extensionSettings.newValue || {}),
+            };
+            // Re-initialize to apply new settings
+            init();
+            initRawPage();
         }
     }
 });
@@ -63,6 +92,14 @@ async function injectQuickAccessButtons() {
         window.location.hostname.includes("raw.githubusercontent.com") ||
         window.location.hostname.includes("gist.githubusercontent.com")
     ) {
+        return;
+    }
+
+    // Check settings
+    if (cachedSettings === null) {
+        await loadSettingsCache();
+    }
+    if (!cachedSettings.showQuickAccessLinks) {
         return;
     }
 
@@ -198,6 +235,11 @@ async function init() {
 
     const { owner, repo } = parsedUrl;
 
+    // Load settings cache if not loaded
+    if (cachedSettings === null) {
+        await loadSettingsCache();
+    }
+
     // Use cached GitHub token if available, otherwise load from storage
     if (cachedGithubToken === null) {
         await loadGithubTokenCache();
@@ -241,7 +283,11 @@ async function init() {
         const currentUser = userData.login;
 
         // Check if current repo is a fork and show "Back to Upstream" button
-        if (repoData.fork && repoData.parent) {
+        if (
+            cachedSettings.showForkUpstreamButtons &&
+            repoData.fork &&
+            repoData.parent
+        ) {
             const upstreamUrl = repoData.parent.html_url;
             const upstreamFullName = repoData.parent.full_name;
             addUpstreamButton(upstreamUrl, upstreamFullName);
@@ -259,22 +305,32 @@ async function init() {
         // Only show "GitHub Assistant" and import buttons if we're NOT on our own repo
         if (owner !== currentUser) {
             // Find all forks owned by the user
-            const forks = await findAllForks(
-                currentUser,
-                sourceOwner,
-                sourceRepo,
-                githubToken
-            );
+            if (cachedSettings.showForkUpstreamButtons) {
+                const forks = await findAllForks(
+                    currentUser,
+                    sourceOwner,
+                    sourceRepo,
+                    githubToken
+                );
 
-            if (forks.length > 0) {
-                addForkButton(forks);
+                if (forks.length > 0) {
+                    addForkButton(forks);
+                }
             }
 
             // Show import button for repos not owned by user
-            console.log(
-                `GitHub Assistant: Showing import button for ${owner}/${repo}`
-            );
-            addImportButton(owner, repo, repoData, currentUser, githubToken);
+            if (cachedSettings.showImportButton) {
+                console.log(
+                    `GitHub Assistant: Showing import button for ${owner}/${repo}`
+                );
+                addImportButton(
+                    owner,
+                    repo,
+                    repoData,
+                    currentUser,
+                    githubToken
+                );
+            }
         } else {
             console.log(
                 `GitHub Assistant: Skipping import button (own repo: ${owner}/${repo})`
@@ -778,7 +834,17 @@ function addRawPageButton(targetUrl, buttonText) {
 /**
  * Initialize raw page handler - detects if we're on a raw page and adds appropriate button
  */
-function initRawPage() {
+async function initRawPage() {
+    // Load settings if not loaded
+    if (cachedSettings === null) {
+        await loadSettingsCache();
+    }
+
+    // Check if raw page buttons are enabled
+    if (!cachedSettings.showRawPageButtons) {
+        return;
+    }
+
     const currentUrl = location.href;
 
     // Check if we're on a gist raw page

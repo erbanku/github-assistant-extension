@@ -130,6 +130,26 @@
             line-height: 1.5;
         }
 
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+
+        .checkbox-group label {
+            margin: 0;
+            font-weight: 400;
+            cursor: pointer;
+            flex: 1;
+        }
+
         .permissions-list {
             background: #f6f8fa;
             border-radius: 6px;
@@ -490,6 +510,29 @@
             </div>
         </div>
 
+        <div class="setup-section">
+            <label>Extension Settings</label>
+            <div class="help-text" style="margin-bottom: 12px;">
+                Control which buttons are shown on GitHub pages
+            </div>
+            <div class="checkbox-group">
+                <input type="checkbox" id="setup-setting-import-btn" checked>
+                <label for="setup-setting-import-btn">Show Import Repository button</label>
+            </div>
+            <div class="checkbox-group">
+                <input type="checkbox" id="setup-setting-quick-links" checked>
+                <label for="setup-setting-quick-links">Show Quick Access Links</label>
+            </div>
+            <div class="checkbox-group">
+                <input type="checkbox" id="setup-setting-fork-upstream" checked>
+                <label for="setup-setting-fork-upstream">Show Go to Fork/Upstream buttons</label>
+            </div>
+            <div class="checkbox-group">
+                <input type="checkbox" id="setup-setting-raw-page" checked>
+                <label for="setup-setting-raw-page">Show Raw Page buttons</label>
+            </div>
+        </div>
+
         <div class="popup-content">
             <p><strong>How to set up:</strong></p>
             <ol style="padding-left: 20px; margin: 8px 0;">
@@ -546,6 +589,29 @@
             <div id="configured-links-container" style="margin-top: 8px;"></div>
             <button id="edit-links-btn" class="btn btn-secondary btn-block" style="margin-top: 12px;">Edit
                 Links</button>
+        </div>
+
+        <div class="setup-section">
+            <label>Extension Settings</label>
+            <div class="help-text" style="margin-bottom: 12px;">
+                Control which buttons are shown on GitHub pages
+            </div>
+            <div class="checkbox-group">
+                <input type="checkbox" id="setting-import-btn" checked>
+                <label for="setting-import-btn">Show Import Repository button</label>
+            </div>
+            <div class="checkbox-group">
+                <input type="checkbox" id="setting-quick-links" checked>
+                <label for="setting-quick-links">Show Quick Access Links</label>
+            </div>
+            <div class="checkbox-group">
+                <input type="checkbox" id="setting-fork-upstream" checked>
+                <label for="setting-fork-upstream">Show Go to Fork/Upstream buttons</label>
+            </div>
+            <div class="checkbox-group">
+                <input type="checkbox" id="setting-raw-page" checked>
+                <label for="setting-raw-page">Show Raw Page buttons</label>
+            </div>
         </div>
     </div>
 

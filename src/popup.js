@@ -23,6 +23,19 @@ const jsonEditor = document.getElementById("json-editor");
 const jsonError = document.getElementById("json-error");
 const jsonLineNumbers = document.getElementById("json-line-numbers");
 const resetLinksBtn = document.getElementById("reset-links-btn");
+
+// Settings checkboxes
+const setupImportBtn = document.getElementById("setup-setting-import-btn");
+const setupQuickLinks = document.getElementById("setup-setting-quick-links");
+const setupForkUpstream = document.getElementById(
+    "setup-setting-fork-upstream"
+);
+const setupRawPage = document.getElementById("setup-setting-raw-page");
+const configImportBtn = document.getElementById("setting-import-btn");
+const configQuickLinks = document.getElementById("setting-quick-links");
+const configForkUpstream = document.getElementById("setting-fork-upstream");
+const configRawPage = document.getElementById("setting-raw-page");
+
 let savedToken = "";
 let currentView = "form";
 
@@ -420,67 +433,96 @@ function collectQuickLinks() {
 }
 
 // Load saved token on popup open
-chrome.storage.sync.get(["githubToken", "quickAccessLinks"], async (data) => {
-    if (data.githubToken) {
-        savedToken = data.githubToken;
-        displayTokenSpan.textContent = "••••••••••••••••••••";
-        // If we have a token but no quick links, fetch orgs as defaults
-        if (
-            !data.quickAccessLinks ||
-            data.quickAccessLinks.length === 0 ||
-            data.quickAccessLinks.every((link) => !link.url)
-        ) {
-            try {
-                const orgsResponse = await fetch(
-                    "https://api.github.com/user/orgs",
-                    {
-                        headers: {
-                            Authorization: `token ${data.githubToken}`,
-                            Accept: "application/vnd.github.v3+json",
-                        },
+chrome.storage.sync.get(
+    ["githubToken", "quickAccessLinks", "extensionSettings"],
+    async (data) => {
+        // Load settings
+        const defaultSettings = {
+            showImportButton: true,
+            showQuickAccessLinks: true,
+            showForkUpstreamButtons: true,
+            showRawPageButtons: true,
+        };
+        const settings = {
+            ...defaultSettings,
+            ...(data.extensionSettings || {}),
+        };
+
+        // Set checkbox states in both views
+        setupImportBtn.checked = settings.showImportButton;
+        setupQuickLinks.checked = settings.showQuickAccessLinks;
+        setupForkUpstream.checked = settings.showForkUpstreamButtons;
+        setupRawPage.checked = settings.showRawPageButtons;
+        configImportBtn.checked = settings.showImportButton;
+        configQuickLinks.checked = settings.showQuickAccessLinks;
+        configForkUpstream.checked = settings.showForkUpstreamButtons;
+        configRawPage.checked = settings.showRawPageButtons;
+
+        if (data.githubToken) {
+            savedToken = data.githubToken;
+            displayTokenSpan.textContent = "••••••••••••••••••••";
+            // If we have a token but no quick links, fetch orgs as defaults
+            if (
+                !data.quickAccessLinks ||
+                data.quickAccessLinks.length === 0 ||
+                data.quickAccessLinks.every((link) => !link.url)
+            ) {
+                try {
+                    const orgsResponse = await fetch(
+                        "https://api.github.com/user/orgs",
+                        {
+                            headers: {
+                                Authorization: `token ${data.githubToken}`,
+                                Accept: "application/vnd.github.v3+json",
+                            },
+                        }
+                    );
+
+                    if (orgsResponse.ok) {
+                        const orgs = await orgsResponse.json();
+                        const defaultColors = [
+                            "green",
+                            "yellow",
+                            "blue",
+                            "purple",
+                            "green",
+                        ];
+                        const defaultLinks = orgs
+                            .slice(0, 5)
+                            .map((org, idx) => ({
+                                name: org.login,
+                                url: `https://github.com/${org.login}`,
+                                color: defaultColors[idx],
+                            }));
+
+                        // Save default links
+                        chrome.storage.sync.set({
+                            quickAccessLinks: defaultLinks,
+                        });
+                        displayConfiguredLinks(defaultLinks);
+                        initQuickLinks(defaultLinks);
+                    } else {
+                        displayConfiguredLinks(data.quickAccessLinks || []);
+                        initQuickLinks(data.quickAccessLinks || []);
                     }
-                );
-
-                if (orgsResponse.ok) {
-                    const orgs = await orgsResponse.json();
-                    const defaultColors = [
-                        "green",
-                        "yellow",
-                        "blue",
-                        "purple",
-                        "green",
-                    ];
-                    const defaultLinks = orgs.slice(0, 5).map((org, idx) => ({
-                        name: org.login,
-                        url: `https://github.com/${org.login}`,
-                        color: defaultColors[idx],
-                    }));
-
-                    // Save default links
-                    chrome.storage.sync.set({ quickAccessLinks: defaultLinks });
-                    displayConfiguredLinks(defaultLinks);
-                    initQuickLinks(defaultLinks);
-                } else {
+                } catch (err) {
+                    console.log("Could not fetch organizations");
                     displayConfiguredLinks(data.quickAccessLinks || []);
                     initQuickLinks(data.quickAccessLinks || []);
                 }
-            } catch (err) {
-                console.log("Could not fetch organizations");
+            } else {
                 displayConfiguredLinks(data.quickAccessLinks || []);
                 initQuickLinks(data.quickAccessLinks || []);
             }
+            showConfiguredView();
         } else {
-            displayConfiguredLinks(data.quickAccessLinks || []);
+            document.getElementById("token-section").style.display = "block";
+            document.getElementById("links-section").style.display = "block";
+            showSetupView();
             initQuickLinks(data.quickAccessLinks || []);
         }
-        showConfiguredView();
-    } else {
-        document.getElementById("token-section").style.display = "block";
-        document.getElementById("links-section").style.display = "block";
-        showSetupView();
-        initQuickLinks(data.quickAccessLinks || []);
     }
-});
+);
 
 // Save token
 saveBtn.addEventListener("click", async () => {
@@ -713,3 +755,36 @@ tokenInput.addEventListener("keypress", (e) => {
         saveBtn.click();
     }
 });
+
+// Settings change handlers
+function saveSettings() {
+    const settings = {
+        showImportButton: setupImportBtn.checked,
+        showQuickAccessLinks: setupQuickLinks.checked,
+        showForkUpstreamButtons: setupForkUpstream.checked,
+        showRawPageButtons: setupRawPage.checked,
+    };
+    chrome.storage.sync.set({ extensionSettings: settings });
+}
+
+function saveConfiguredSettings() {
+    const settings = {
+        showImportButton: configImportBtn.checked,
+        showQuickAccessLinks: configQuickLinks.checked,
+        showForkUpstreamButtons: configForkUpstream.checked,
+        showRawPageButtons: configRawPage.checked,
+    };
+    chrome.storage.sync.set({ extensionSettings: settings });
+}
+
+// Setup view settings
+setupImportBtn.addEventListener("change", saveSettings);
+setupQuickLinks.addEventListener("change", saveSettings);
+setupForkUpstream.addEventListener("change", saveSettings);
+setupRawPage.addEventListener("change", saveSettings);
+
+// Configured view settings
+configImportBtn.addEventListener("change", saveConfiguredSettings);
+configQuickLinks.addEventListener("change", saveConfiguredSettings);
+configForkUpstream.addEventListener("change", saveConfiguredSettings);
+configRawPage.addEventListener("change", saveConfiguredSettings);
