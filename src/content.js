@@ -1060,7 +1060,7 @@ function createForkButtonContainer(forks) {
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      padding: 5px 12px;
+      padding: 3px 8px;
       background-color: #238636;
       color: white !important;
       border: 1px solid rgba(27, 31, 36, 0.15);
@@ -1100,7 +1100,7 @@ function createForkButtonContainer(forks) {
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      padding: 5px 12px;
+      padding: 3px 8px;
       background-color: #238636;
       color: white !important;
       border: 1px solid rgba(27, 31, 36, 0.15);
@@ -1126,7 +1126,7 @@ function createForkButtonContainer(forks) {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      padding: 5px 6px;
+      padding: 3px 6px;
       background-color: #238636;
       color: white;
       border: 1px solid rgba(27, 31, 36, 0.15);
@@ -1270,7 +1270,7 @@ function createUpstreamButtonContainer(upstreamUrl, upstreamFullName) {
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      padding: 5px 12px;
+      padding: 3px 8px;
       background-color: #0969da;
       color: white !important;
       border: 1px solid rgba(27, 31, 36, 0.15);
@@ -1360,7 +1360,7 @@ function createImportButtonContainer(
         display: inline-flex;
         align-items: center;
         gap: 4px;
-        padding: 5px 12px;
+        padding: 3px 8px;
         background-color: #6639ba;
         color: white !important;
         border: 1px solid rgba(27, 31, 36, 0.15);
