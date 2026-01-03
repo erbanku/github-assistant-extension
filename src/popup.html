@@ -300,6 +300,111 @@
             gap: 4px;
             align-items: center;
         }
+
+        .view-toggle {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+            border-bottom: 1px solid #d0d7de;
+            padding-bottom: 8px;
+        }
+
+        .view-toggle button {
+            background: none;
+            border: none;
+            padding: 4px 8px;
+            font-size: 12px;
+            font-weight: 500;
+            color: #57606a;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .view-toggle button:hover {
+            color: #24292f;
+        }
+
+        .view-toggle button.active {
+            color: #24292f;
+            border-bottom-color: #fd8c73;
+        }
+
+        .json-editor-wrapper {
+            display: flex;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            overflow: hidden;
+            background: white;
+        }
+
+        .json-line-numbers {
+            padding: 8px 12px;
+            background: #f6f8fa;
+            color: #57606a;
+            font-size: 12px;
+            font-family: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
+            user-select: none;
+            min-width: 80px;
+            border-right: 1px solid #d0d7de;
+            line-height: 1.5;
+            overflow-y: hidden;
+        }
+
+        .json-line-numbers div {
+            white-space: nowrap;
+        }
+
+        #json-editor {
+            flex: 1;
+            min-height: 200px;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 0;
+            font-size: 12px;
+            box-sizing: border-box;
+            font-family: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
+            resize: vertical;
+            background: white;
+            line-height: 1.5;
+        }
+
+        #json-editor:focus {
+            outline: none;
+        }
+
+        .json-view-container {
+            display: none;
+        }
+
+        .json-view-container.active {
+            display: block;
+        }
+
+        .form-view-container {
+            display: block;
+        }
+
+        .form-view-container.hidden {
+            display: none;
+        }
+
+        .json-help {
+            font-size: 11px;
+            color: #57606a;
+            margin-top: 6px;
+        }
+
+        .json-error {
+            color: #cf222e;
+            font-size: 11px;
+            margin-top: 6px;
+            display: none;
+        }
+
+        .json-error.show {
+            display: block;
+        }
     </style>
 </head>
 
@@ -363,7 +468,26 @@
             <div class="help-text" style="margin-bottom: 12px;">
                 Add up to 5 custom GitHub links for quick access on any GitHub page.
             </div>
-            <div id="quick-links-container"></div>
+            <div class="view-toggle">
+                <button id="form-view-btn" class="active">Form View</button>
+                <button id="json-view-btn">JSON View</button>
+                <button id="reset-links-btn" class="btn-secondary"
+                    style="margin-left: auto; padding: 4px 12px; font-size: 12px; border-radius: 6px;">Reset to
+                    Org Links</button>
+            </div>
+            <div id="form-view-container" class="form-view-container">
+                <div id="quick-links-container"></div>
+            </div>
+            <div id="json-view-container" class="json-view-container">
+                <div class="json-editor-wrapper">
+                    <div class="json-line-numbers" id="json-line-numbers"></div>
+                    <textarea id="json-editor"
+                        placeholder='[{"name":"Example","link_num":"LINK 1","url":"https://github.com/example","color":"blue"}]'></textarea>
+                </div>
+                <div class="json-help">Edit JSON directly. Format: Array of objects with name, link_num, url, and color
+                    (blue/yellow/green/purple). link_num is auto-generated from form view.</div>
+                <div id="json-error" class="json-error"></div>
+            </div>
         </div>
 
         <div class="popup-content">

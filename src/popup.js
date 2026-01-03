@@ -15,7 +15,178 @@ const toggleTokenBtn = document.getElementById("toggle-token");
 const toggleDisplayTokenBtn = document.getElementById("toggle-display-token");
 const copyTokenBtn = document.getElementById("copy-token-btn");
 const displayTokenSpan = document.getElementById("display-token");
+const formViewBtn = document.getElementById("form-view-btn");
+const jsonViewBtn = document.getElementById("json-view-btn");
+const formViewContainer = document.getElementById("form-view-container");
+const jsonViewContainer = document.getElementById("json-view-container");
+const jsonEditor = document.getElementById("json-editor");
+const jsonError = document.getElementById("json-error");
+const jsonLineNumbers = document.getElementById("json-line-numbers");
+const resetLinksBtn = document.getElementById("reset-links-btn");
 let savedToken = "";
+let currentView = "form";
+
+// Reset links by fetching organizations again
+resetLinksBtn.addEventListener("click", async () => {
+    if (!savedToken) {
+        showStatus(
+            "No GitHub token found. Please configure your token first.",
+            "error"
+        );
+        return;
+    }
+
+    resetLinksBtn.textContent = "Fetching...";
+    resetLinksBtn.disabled = true;
+
+    try {
+        const orgsResponse = await fetch("https://api.github.com/user/orgs", {
+            headers: {
+                Authorization: `token ${savedToken}`,
+                Accept: "application/vnd.github.v3+json",
+            },
+        });
+
+        if (orgsResponse.ok) {
+            const orgs = await orgsResponse.json();
+            const defaultColors = [
+                "green",
+                "yellow",
+                "blue",
+                "purple",
+                "green",
+            ];
+            const newLinks = orgs.slice(0, 5).map((org, idx) => ({
+                name: org.login,
+                link_num: `LINK ${idx + 1}`,
+                url: `https://github.com/${org.login}`,
+                color: defaultColors[idx],
+            }));
+
+            // Save and update UI
+            chrome.storage.sync.set({ quickAccessLinks: newLinks }, () => {
+                initQuickLinks(newLinks);
+                jsonEditor.value = JSON.stringify(newLinks, null, 2);
+                updateJsonLineNumbers();
+                showStatus(
+                    `✓ Reset to ${newLinks.length} organization link(s)!`,
+                    "success"
+                );
+                setTimeout(() => {
+                    statusDiv.style.display = "none";
+                }, 2000);
+            });
+        } else {
+            showStatus(
+                "Failed to fetch organizations. Check your token permissions.",
+                "error"
+            );
+        }
+    } catch (err) {
+        console.error("Error fetching organizations:", err);
+        showStatus("Network error. Please try again.", "error");
+    } finally {
+        resetLinksBtn.textContent = "Reset to Org Links";
+        resetLinksBtn.disabled = false;
+    }
+});
+
+// Update JSON line numbers with Link labels
+function updateJsonLineNumbers() {
+    const lines = jsonEditor.value.split("\n");
+    let lineNumbers = "";
+    let linkIndex = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+
+        // Detect start of a new object
+        if (line.startsWith("{")) {
+            lineNumbers += `<div>Link ${linkIndex + 1}</div>`;
+            linkIndex++;
+        } else {
+            lineNumbers += "<div></div>";
+        }
+    }
+
+    jsonLineNumbers.innerHTML = lineNumbers;
+}
+
+// Sync JSON editor scroll with line numbers
+jsonEditor.addEventListener("scroll", () => {
+    jsonLineNumbers.scrollTop = jsonEditor.scrollTop;
+});
+
+// Update line numbers when JSON changes
+jsonEditor.addEventListener("input", () => {
+    updateJsonLineNumbers();
+});
+
+// Toggle between form and JSON view
+formViewBtn.addEventListener("click", () => {
+    currentView = "form";
+    formViewBtn.classList.add("active");
+    jsonViewBtn.classList.remove("active");
+    formViewContainer.classList.remove("hidden");
+    jsonViewContainer.classList.remove("active");
+    jsonError.classList.remove("show");
+
+    // Sync from JSON to form if there are changes
+    try {
+        const jsonData = JSON.parse(jsonEditor.value || "[]");
+        initQuickLinks(jsonData);
+    } catch (e) {
+        // Keep existing form data if JSON is invalid
+    }
+});
+
+jsonViewBtn.addEventListener("click", () => {
+    currentView = "json";
+    jsonViewBtn.classList.add("active");
+    formViewBtn.classList.remove("active");
+    formViewContainer.classList.add("hidden");
+    jsonViewContainer.classList.add("active");
+    jsonError.classList.remove("show");
+
+    // Sync from form to JSON
+    const links = collectQuickLinks();
+    jsonEditor.value = JSON.stringify(links, null, 2);
+    updateJsonLineNumbers();
+});
+
+// Validate and auto-save JSON
+jsonEditor.addEventListener(
+    "input",
+    debounce(() => {
+        try {
+            const data = JSON.parse(jsonEditor.value || "[]");
+
+            // Validate structure
+            if (!Array.isArray(data)) {
+                throw new Error("JSON must be an array");
+            }
+
+            // Validate URLs
+            for (const item of data) {
+                if (item.url && !isValidGitHubUrl(item.url)) {
+                    throw new Error(`Invalid GitHub URL: ${item.url}`);
+                }
+            }
+
+            // Limit to 5 items
+            const limitedData = data.slice(0, 5);
+
+            // Save if valid
+            chrome.storage.sync.set({ quickAccessLinks: limitedData }, () => {
+                console.log("Quick links saved from JSON");
+                jsonError.classList.remove("show");
+            });
+        } catch (e) {
+            jsonError.textContent = `Invalid JSON: ${e.message}`;
+            jsonError.classList.add("show");
+        }
+    }, 1000)
+);
 
 // Copy token to clipboard
 copyTokenBtn.addEventListener("click", async () => {
@@ -180,6 +351,11 @@ function autoSaveQuickLinks() {
 
     chrome.storage.sync.set({ quickAccessLinks: quickLinks }, () => {
         console.log("Quick links auto-saved");
+        // Sync to JSON editor if currently in form view
+        if (currentView === "form") {
+            jsonEditor.value = JSON.stringify(quickLinks, null, 2);
+            updateJsonLineNumbers();
+        }
     });
 }
 
@@ -232,7 +408,12 @@ function collectQuickLinks() {
         const color = colorSelects[i].value;
 
         if (url || name) {
-            links.push({ name, url, color });
+            links.push({
+                name,
+                link_num: `LINK ${i + 1}`,
+                url,
+                color,
+            });
         }
     }
     return links;
