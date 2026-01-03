@@ -3,3 +3,6 @@ store-assets/
 misc/
 .vscode/private-folder-alias.json
 *.zip
+
+src.crx
+src.pem
