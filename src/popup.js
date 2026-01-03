@@ -11,6 +11,56 @@ const configuredLinksContainer = document.getElementById(
     "configured-links-container"
 );
 const editLinksBtn = document.getElementById("edit-links-btn");
+const toggleTokenBtn = document.getElementById("toggle-token");
+const toggleDisplayTokenBtn = document.getElementById("toggle-display-token");
+const copyTokenBtn = document.getElementById("copy-token-btn");
+const displayTokenSpan = document.getElementById("display-token");
+let savedToken = "";
+
+// Copy token to clipboard
+copyTokenBtn.addEventListener("click", async () => {
+    try {
+        await navigator.clipboard.writeText(savedToken);
+        copyTokenBtn.classList.add("copied");
+        const originalTitle = copyTokenBtn.title;
+        copyTokenBtn.title = "Copied!";
+
+        setTimeout(() => {
+            copyTokenBtn.classList.remove("copied");
+            copyTokenBtn.title = originalTitle;
+        }, 2000);
+    } catch (err) {
+        console.error("Failed to copy token:", err);
+    }
+});
+
+// Toggle password visibility in setup view
+toggleTokenBtn.addEventListener("click", () => {
+    const isPassword = tokenInput.type === "password";
+    tokenInput.type = isPassword ? "text" : "password";
+    document.getElementById("eye-icon").style.display = isPassword
+        ? "none"
+        : "block";
+    document.getElementById("eye-slash-icon").style.display = isPassword
+        ? "block"
+        : "none";
+});
+
+// Toggle token visibility in configured view
+toggleDisplayTokenBtn.addEventListener("click", () => {
+    const isHidden = displayTokenSpan.textContent.startsWith("••");
+    if (isHidden) {
+        displayTokenSpan.textContent = savedToken;
+        document.getElementById("eye-icon-display").style.display = "none";
+        document.getElementById("eye-slash-icon-display").style.display =
+            "block";
+    } else {
+        displayTokenSpan.textContent = "••••••••••••••••••••";
+        document.getElementById("eye-icon-display").style.display = "block";
+        document.getElementById("eye-slash-icon-display").style.display =
+            "none";
+    }
+});
 
 // Color palette options
 const colorOptions = [
@@ -191,6 +241,8 @@ function collectQuickLinks() {
 // Load saved token on popup open
 chrome.storage.sync.get(["githubToken", "quickAccessLinks"], async (data) => {
     if (data.githubToken) {
+        savedToken = data.githubToken;
+        displayTokenSpan.textContent = "••••••••••••••••••••";
         // If we have a token but no quick links, fetch orgs as defaults
         if (
             !data.quickAccessLinks ||
