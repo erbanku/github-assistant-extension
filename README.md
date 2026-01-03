@@ -1,4 +1,4 @@
-# Go to Fork Chrome Extension
+# GitHub Assistant Chrome Extension
 
 A Chrome extension that shows convenient navigation and import buttons when viewing repositories on GitHub.
 
@@ -7,7 +7,7 @@ https://chromewebstore.google.com/detail/github-go-to-fork/gmafgjjojobkaegbpnmkj
 
 ## Features
 
--   **Go to Fork**: One-click navigation to your forked repository when viewing the upstream
+-   **GitHub Assistant**: One-click navigation to your forked repository when viewing the upstream
 -   **Import Repository**: Redirects to GitHub's import page with pre-filled repository details (URL, name, description)
 -   **Back to Upstream**: Easy navigation from your fork back to the original repository
 -   **Smart Naming**: Automatically handles name conflicts by appending numbers (repo-1, repo-2, etc.)

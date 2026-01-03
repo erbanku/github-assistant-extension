@@ -1,8 +1,8 @@
-# Go to Fork - Chrome Extension
+# GitHub Assistant - Chrome Extension
 
 ## Architecture Overview
 
-This is a Manifest V3 Chrome extension that injects a "Go to Fork" button into GitHub repository pages when the user has forked that repository. It consists of three main components:
+This is a Manifest V3 Chrome extension that injects a "GitHub Assistant" button into GitHub repository pages when the user has forked that repository. It consists of three main components:
 
 -   **Content Script** (`src/content.js`): Injected into all `github.com` pages, detects repo URLs, queries GitHub API, and injects UI
 -   **Popup UI** (`src/popup.html` + `src/popup.js`): Extension popup for GitHub token configuration and management
@@ -59,7 +59,7 @@ Always remove existing `#go-to-fork-container` before injecting to prevent dupli
 
 ### UI/UX Patterns
 
--   **Single fork**: Green button with fork icon + "Go to Fork" text
+-   **Single fork**: Green button with fork icon + "GitHub Assistant" text
 -   **Multiple forks**: Split button with dropdown menu showing `owner/name` for each fork
 -   Styling matches GitHub's design system (`.btn`, `.btn-sm`, green `#238636` primary color)
 -   Dropdown closes on outside click using global document listener
@@ -93,7 +93,7 @@ Token format validation enforces `ghp_` or `github_pat_` prefixes.
 
 ### Common Pitfalls
 
--   **Button not appearing**: Check console logs prefixed with `Go to Fork:`
+-   **Button not appearing**: Check console logs prefixed with `GitHub Assistant:`
 -   **Duplicate buttons**: Ensure `#go-to-fork-container` removal happens before injection
 -   **API rate limits**: GitHub unauthenticated rate limit is 60/hour; authenticated is 5000/hour
 -   **Header selector changes**: GitHub frequently updates their DOM structure; test against current GitHub UI

@@ -192,7 +192,7 @@ async function init() {
 
     const parsedUrl = parseGitHubUrl(location.href);
     if (!parsedUrl) {
-        console.log("Go to Fork: Could not parse GitHub URL");
+        console.log("GitHub Assistant: Could not parse GitHub URL");
         return;
     }
 
@@ -205,7 +205,7 @@ async function init() {
 
     const githubToken = cachedGithubToken;
     if (!githubToken) {
-        console.log("Go to Fork: No GitHub token found");
+        console.log("GitHub Assistant: No GitHub token found");
         return;
     }
 
@@ -228,7 +228,7 @@ async function init() {
 
         if (!userResp.ok || !repoResp.ok) {
             console.log(
-                `Go to Fork: API request failed (user: ${userResp.status}, repo: ${repoResp.status})`
+                `GitHub Assistant: API request failed (user: ${userResp.status}, repo: ${repoResp.status})`
             );
             return;
         }
@@ -256,7 +256,7 @@ async function init() {
             sourceRepo = repoData.source.name;
         }
 
-        // Only show "Go to Fork" and import buttons if we're NOT on our own repo
+        // Only show "GitHub Assistant" and import buttons if we're NOT on our own repo
         if (owner !== currentUser) {
             // Find all forks owned by the user
             const forks = await findAllForks(
@@ -272,16 +272,16 @@ async function init() {
 
             // Show import button for repos not owned by user
             console.log(
-                `Go to Fork: Showing import button for ${owner}/${repo}`
+                `GitHub Assistant: Showing import button for ${owner}/${repo}`
             );
             addImportButton(owner, repo, repoData, currentUser, githubToken);
         } else {
             console.log(
-                `Go to Fork: Skipping import button (own repo: ${owner}/${repo})`
+                `GitHub Assistant: Skipping import button (own repo: ${owner}/${repo})`
             );
         }
     } catch (error) {
-        console.error("Go to Fork: Error in init():", error);
+        console.error("GitHub Assistant: Error in init():", error);
     }
 }
 
@@ -333,7 +333,7 @@ function autofillImportForm() {
     // Get stored import data
     const importDataStr = sessionStorage.getItem("gh_import_data");
     if (!importDataStr) {
-        console.log("Go to Fork: No import data found in sessionStorage");
+        console.log("GitHub Assistant: No import data found in sessionStorage");
         return;
     }
 
@@ -341,12 +341,15 @@ function autofillImportForm() {
 
     // Check if data is recent (within 30 seconds)
     if (Date.now() - importData.timestamp > 30000) {
-        console.log("Go to Fork: Import data expired");
+        console.log("GitHub Assistant: Import data expired");
         sessionStorage.removeItem("gh_import_data");
         return;
     }
 
-    console.log("Go to Fork: Auto-filling import form with data:", importData);
+    console.log(
+        "GitHub Assistant: Auto-filling import form with data:",
+        importData
+    );
 
     // Add a helpful banner
     const addBanner = () => {
@@ -435,7 +438,7 @@ function autofillImportForm() {
             'input[type="text"], input[type="url"], input:not([type])'
         );
         console.log(
-            "Go to Fork: Found input fields:",
+            "GitHub Assistant: Found input fields:",
             Array.from(allInputs).map((i) => ({
                 name: i.name,
                 id: i.id,
@@ -466,7 +469,7 @@ function autofillImportForm() {
             });
 
         if (urlInput) {
-            console.log("Go to Fork: Found URL input:", urlInput);
+            console.log("GitHub Assistant: Found URL input:", urlInput);
             // Use native setter to bypass React
             const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
                 window.HTMLInputElement.prototype,
@@ -480,7 +483,7 @@ function autofillImportForm() {
             urlInput.focus();
             filled = true;
         } else {
-            console.log("Go to Fork: URL input not found");
+            console.log("GitHub Assistant: URL input not found");
         }
 
         // Fill repository name
@@ -490,7 +493,7 @@ function autofillImportForm() {
             document.querySelector('input[name="name"]');
 
         if (nameInput) {
-            console.log("Go to Fork: Found name input:", nameInput);
+            console.log("GitHub Assistant: Found name input:", nameInput);
             const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
                 window.HTMLInputElement.prototype,
                 "value"
@@ -502,7 +505,7 @@ function autofillImportForm() {
             nameInput.dispatchEvent(new Event("blur", { bubbles: true }));
             filled = true;
         } else {
-            console.log("Go to Fork: Name input not found");
+            console.log("GitHub Assistant: Name input not found");
         }
 
         // Fill credentials for private repos
@@ -513,7 +516,7 @@ function autofillImportForm() {
                 document.querySelector('input[placeholder*="username"]');
 
             if (usernameInput) {
-                console.log("Go to Fork: Found username input");
+                console.log("GitHub Assistant: Found username input");
                 const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
                     window.HTMLInputElement.prototype,
                     "value"
@@ -536,7 +539,7 @@ function autofillImportForm() {
                 document.querySelector('input[type="password"]');
 
             if (passwordInput) {
-                console.log("Go to Fork: Found password input");
+                console.log("GitHub Assistant: Found password input");
                 const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
                     window.HTMLInputElement.prototype,
                     "value"
@@ -555,7 +558,7 @@ function autofillImportForm() {
         }
 
         if (filled) {
-            console.log("Go to Fork: Form filled successfully");
+            console.log("GitHub Assistant: Form filled successfully");
             // Clear after successful fill
             sessionStorage.removeItem("gh_import_data");
             return true;
@@ -748,7 +751,7 @@ function addRawPageButton(targetUrl, buttonText) {
                 copyButton.style.backgroundColor = "#0969da";
             }, 2000);
         } catch (err) {
-            console.error("Go to Fork: Failed to copy content:", err);
+            console.error("GitHub Assistant: Failed to copy content:", err);
 
             // Show error feedback
             const originalHTML = copyButton.innerHTML;
@@ -782,7 +785,9 @@ function initRawPage() {
     if (currentUrl.includes("gist.githubusercontent.com")) {
         const gistUrl = parseGistRawUrl(currentUrl);
         if (gistUrl) {
-            console.log("Go to Fork: Detected gist raw page, adding button");
+            console.log(
+                "GitHub Assistant: Detected gist raw page, adding button"
+            );
             addRawPageButton(gistUrl, "Go to Gist");
         }
         return;
@@ -792,7 +797,9 @@ function initRawPage() {
     if (currentUrl.includes("raw.githubusercontent.com")) {
         const fileUrl = parseRepoRawUrl(currentUrl);
         if (fileUrl) {
-            console.log("Go to Fork: Detected repo raw page, adding button");
+            console.log(
+                "GitHub Assistant: Detected repo raw page, adding button"
+            );
             addRawPageButton(fileUrl, "Go to File");
         }
         return;
@@ -816,7 +823,7 @@ function handleNavigation() {
     const url = location.href;
     if (url !== lastUrl) {
         console.log(
-            `Go to Fork: Navigation detected from ${lastUrl} to ${url}`
+            `GitHub Assistant: Navigation detected from ${lastUrl} to ${url}`
         );
         lastUrl = url;
 
@@ -828,7 +835,7 @@ function handleNavigation() {
 
         // Reinitialize immediately with minimal delay
         setTimeout(async () => {
-            console.log("Go to Fork: Reinitializing after navigation...");
+            console.log("GitHub Assistant: Reinitializing after navigation...");
             await init();
             autofillImportForm();
         }, 50);
@@ -860,7 +867,9 @@ async function findAllForks(currentUser, sourceOwner, sourceRepo, githubToken) {
     const userOrgs = new Set();
     userOrgs.add(currentUser);
 
-    console.log(`Go to Fork: Searching forks for ${sourceOwner}/${sourceRepo}`);
+    console.log(
+        `GitHub Assistant: Searching forks for ${sourceOwner}/${sourceRepo}`
+    );
 
     // Get user's organizations
     try {
@@ -879,7 +888,7 @@ async function findAllForks(currentUser, sourceOwner, sourceRepo, githubToken) {
             orgs.forEach((org) => userOrgs.add(org.login));
         }
     } catch (e) {
-        console.log("Go to Fork: Could not fetch organizations:", e);
+        console.log("GitHub Assistant: Could not fetch organizations:", e);
     }
 
     // Use the GitHub forks API to get all forks of the source repo
@@ -900,7 +909,7 @@ async function findAllForks(currentUser, sourceOwner, sourceRepo, githubToken) {
 
             if (!forksResp.ok) {
                 console.log(
-                    `Go to Fork: Failed to fetch forks (status ${forksResp.status})`
+                    `GitHub Assistant: Failed to fetch forks (status ${forksResp.status})`
                 );
                 break;
             }
@@ -930,11 +939,11 @@ async function findAllForks(currentUser, sourceOwner, sourceRepo, githubToken) {
             if (allForks.length < 100) hasMore = false;
         }
     } catch (e) {
-        console.log("Go to Fork: Could not fetch forks:", e);
+        console.log("GitHub Assistant: Could not fetch forks:", e);
     }
 
     if (forks.length > 0) {
-        console.log(`Go to Fork: Found ${forks.length} fork(s)`);
+        console.log(`GitHub Assistant: Found ${forks.length} fork(s)`);
     }
     return forks;
 }
@@ -950,7 +959,7 @@ function addForkButton(forks) {
         document.querySelector("header");
 
     if (!repoHeader) {
-        console.log("Go to Fork: Could not find header");
+        console.log("GitHub Assistant: Could not find header");
         return;
     }
 
@@ -961,7 +970,7 @@ function addForkButton(forks) {
     container.style.display = "inline-block";
 
     repoHeader.appendChild(container);
-    console.log("Go to Fork: Button added successfully");
+    console.log("GitHub Assistant: Button added successfully");
 }
 
 function createForkButtonContainer(forks) {
@@ -1001,7 +1010,7 @@ function createForkButtonContainer(forks) {
       <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
         <path d="M5 5.372v.878c0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75v-.878a2.25 2.25 0 1 1 1.5 0v.878a2.25 2.25 0 0 1-2.25 2.25h-1.5v2.128a2.251 2.251 0 1 1-1.5 0V8.5h-1.5A2.25 2.25 0 0 1 3.5 6.25v-.878a2.25 2.25 0 1 1 1.5 0ZM5 3.25a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Zm6.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm-3 8.75a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Z"></path>
       </svg>
-      Go to Fork
+      GitHub Assistant
     `;
         button.addEventListener("mouseover", () => {
             button.style.backgroundColor = "#2ea043";
@@ -1041,7 +1050,7 @@ function createForkButtonContainer(forks) {
       <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
         <path d="M5 5.372v.878c0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75v-.878a2.25 2.25 0 1 1 1.5 0v.878a2.25 2.25 0 0 1-2.25 2.25h-1.5v2.128a2.251 2.251 0 1 1-1.5 0V8.5h-1.5A2.25 2.25 0 0 1 3.5 6.25v-.878a2.25 2.25 0 1 1 1.5 0ZM5 3.25a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Zm6.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm-3 8.75a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Z"></path>
       </svg>
-      Go to Fork
+      GitHub Assistant
     `;
 
         const dropBtn = document.createElement("button");
@@ -1158,7 +1167,9 @@ function addUpstreamButton(upstreamUrl, upstreamFullName) {
         document.querySelector("header");
 
     if (!repoHeader) {
-        console.log("Go to Fork: Could not find header for upstream button");
+        console.log(
+            "GitHub Assistant: Could not find header for upstream button"
+        );
         return;
     }
 
@@ -1171,7 +1182,7 @@ function addUpstreamButton(upstreamUrl, upstreamFullName) {
     container.style.display = "inline-block";
 
     repoHeader.appendChild(container);
-    console.log("Go to Fork: Upstream button added successfully");
+    console.log("GitHub Assistant: Upstream button added successfully");
 }
 
 function createUpstreamButtonContainer(upstreamUrl, upstreamFullName) {
@@ -1237,7 +1248,9 @@ function addImportButton(owner, repo, repoData, currentUser, githubToken) {
         document.querySelector("header");
 
     if (!repoHeader) {
-        console.log("Go to Fork: Could not find header for import button");
+        console.log(
+            "GitHub Assistant: Could not find header for import button"
+        );
         return;
     }
 
@@ -1253,7 +1266,7 @@ function addImportButton(owner, repo, repoData, currentUser, githubToken) {
     container.style.display = "inline-block";
 
     repoHeader.appendChild(container);
-    console.log("Go to Fork: Import button added successfully");
+    console.log("GitHub Assistant: Import button added successfully");
 }
 
 function createImportButtonContainer(
