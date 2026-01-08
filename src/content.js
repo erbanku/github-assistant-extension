@@ -786,9 +786,13 @@ function addRawPageButton(targetUrl, buttonText) {
 
     copyButton.addEventListener("click", async () => {
         try {
-            // Get all text content from the page
-            const content =
-                document.body.innerText || document.body.textContent;
+            // Get the main content (usually <pre> on raw pages)
+            const preElement = document.querySelector("pre");
+            const content = (
+                preElement
+                    ? preElement.innerText || preElement.textContent
+                    : document.body.innerText || document.body.textContent
+            ).trim();
 
             await navigator.clipboard.writeText(content);
 
