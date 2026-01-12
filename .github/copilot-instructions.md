@@ -2,114 +2,235 @@
 
 ## Architecture Overview
 
-This is a Manifest V3 Chrome extension that injects a "GitHub Assistant" button into GitHub repository pages when the user has forked that repository. It consists of three main components:
+Manifest V3 Chrome extension that adds navigation and management features to GitHub repository pages. Core capabilities:
 
--   **Content Script** (`src/content.js`): Injected into all `github.com` pages, detects repo URLs, queries GitHub API, and injects UI
--   **Popup UI** (`src/popup.html` + `src/popup.js`): Extension popup for GitHub token configuration and management
--   **Storage**: Uses `chrome.storage.sync` to persist the GitHub Personal Access Token (encrypted by Chrome)
+-   **Fork Navigation**: One-click navigation to your forked repositories when viewing the upstream
+-   **Import Repository**: Redirect to GitHub's import page with pre-filled details
+-   **Quick Access Links**: Customizable buttons for frequent GitHub destinations (orgs, repos)
+-   **Raw Page Enhancement**: Add navigation and copy buttons to raw.githubusercontent.com pages
 
-## Key Workflows
+### Component Structure
 
-### GitHub SPA Navigation Detection
+-   **[content.js](src/content.js)** (1400+ lines): Main logic - UI injection, GitHub API queries, navigation handling
+-   **[popup.js](src/popup.js) + [popup.html](src/popup.html)**: Token configuration, settings management, quick links editor
+-   **Storage**: `chrome.storage.sync` stores token, settings, and quick access links (encrypted by Chrome)
 
-GitHub uses client-side routing. The extension handles this with a MutationObserver pattern:
+## Critical Patterns
+
+### Multi-Context Initialization
+
+`content.js` handles THREE distinct contexts with separate initialization:
 
 ```javascript
-let lastUrl = location.href;
-new MutationObserver(() => {
-    const url = location.href;
-    if (url !== lastUrl) {
-        lastUrl = url;
-        init();
-    }
-}).observe(document, { subtree: true, childList: true });
+// 1. GitHub pages: Fork/import buttons, quick access
+init();
+
+// 2. GitHub import page: Auto-fill form from sessionStorage
+autofillImportForm();
+
+// 3. Raw content pages: Navigation and copy buttons
+initRawPage();
 ```
 
-Always use this pattern when adding features that respond to navigation—don't rely on page reloads.
+**When adding features**: Determine which context(s) apply and call the appropriate init function.
 
-### Fork Detection Algorithm
+### Settings-Gated Features
 
-The extension follows this flow:
-
-1. Parse current repo URL (`/owner/repo` format only)
-2. Fetch repo details to determine if it's a fork and find the source repository
-3. Fetch all forks of the source repository (paginated, 100 per page)
-4. Filter forks owned by the authenticated user or their organizations
-5. Stop pagination early if matching forks are found
-
-See `findAllForks()` in `content.js` for implementation.
-
-### UI Injection Strategy
-
-The button is appended directly to `.AppHeader-context-full` or fallback selectors. GitHub's header structure is:
-
--   Primary target: `.AppHeader-context-full`
--   Fallback 1: `.AppHeader`
--   Fallback 2: `header` (generic)
-
-Always remove existing `#go-to-fork-container` before injecting to prevent duplicates.
-
-## Project Conventions
-
-### API Interaction
-
--   All GitHub API calls use the `Authorization: token ${githubToken}` header
--   Token validation checks for required scopes: `public_repo` and `read:org` via `X-OAuth-Scopes` response header
--   Graceful degradation: Log errors to console but don't show UI errors to avoid cluttering GitHub pages
-
-### UI/UX Patterns
-
--   **Single fork**: Green button with fork icon + "GitHub Assistant" text
--   **Multiple forks**: Split button with dropdown menu showing `owner/name` for each fork
--   Styling matches GitHub's design system (`.btn`, `.btn-sm`, green `#238636` primary color)
--   Dropdown closes on outside click using global document listener
-
-### Storage Schema
+ALL features check settings before rendering:
 
 ```javascript
-{
-  "githubToken": "ghp_..." // or "github_pat_..."
+const DEFAULT_SETTINGS = {
+    showImportButton: true,
+    showQuickAccessLinks: true,
+    showForkUpstreamButtons: true,
+    showRawPageButtons: true,
+};
+```
+
+Load settings cache with `await loadSettingsCache()` before checking `cachedSettings.showFeatureName`.
+
+### Caching Strategy
+
+Three cache variables avoid repeated storage reads:
+
+-   `cachedGithubToken` - User's GitHub PAT
+-   `cachedQuickAccessLinks` - Custom navigation links
+-   `cachedSettings` - Feature toggles
+
+Update caches via `chrome.storage.onChanged` listener. Re-initialize UI when cache changes.
+
+### GitHub SPA Navigation
+
+GitHub uses client-side routing. Extension uses **triple detection** to catch all navigations:
+
+1. **history.pushState/replaceState interception**
+2. **window popstate listener** (back/forward buttons)
+3. **MutationObserver fallback** (100ms debounced)
+
+```javascript
+function handleNavigation() {
+    // Remove existing buttons by ID to prevent duplicates
+    document.getElementById("go-to-fork-container")?.remove();
+    document.getElementById("back-to-upstream-container")?.remove();
+    // ... remove others
+
+    setTimeout(() => init(), 50); // Brief delay for DOM stability
 }
 ```
 
-Token format validation enforces `ghp_` or `github_pat_` prefixes.
+**Critical**: Always remove existing elements by ID before re-injecting. GitHub's DOM changes are unpredictable.
 
-## Development & Testing
+## UI Injection Patterns
 
-### Loading the Extension
+### Header Injection Selector Cascade
 
-1. Navigate to `chrome://extensions/`
-2. Enable "Developer mode"
-3. Click "Load unpacked" and select the repository root directory
+GitHub frequently changes their header structure. Use fallback chain:
+
+```javascript
+const header =
+    document.querySelector(".AppHeader-context-full") || // Primary
+    document.querySelector(".AppHeader-globalBar") || // Alternative
+    document.querySelector(".AppHeader") || // Fallback
+    document.querySelector("header"); // Generic
+```
+
+### Button Styling Convention
+
+Match GitHub's design system:
+
+-   Fork button: Green (`#238636`), hover `#2ea043`
+-   Import button: Purple (`#6639ba`), hover `#7c52cc`
+-   Quick access: Color-coded (blue/yellow/green/purple) with custom scheme
+-   All buttons: `.btn .btn-sm`, 12px font, 6px border-radius, SVG icons from GitHub's octicons
+
+### Dropdown Pattern (Multiple Forks)
+
+When user has multiple forks, create split button with dropdown:
+
+```javascript
+if (forks.length === 1) {
+    // Simple link button
+} else {
+    // Main button + arrow button + dropdown menu
+    // Dropdown positioned absolute, closes on outside click
+}
+```
+
+See `createForkButtonContainer()` for full implementation.
+
+## API & Data Flow
+
+### GitHub API Usage
+
+All requests include `Authorization: token ${githubToken}` header. Parallel fetch pattern:
+
+```javascript
+const [userResp, repoResp] = await Promise.all([
+    fetch("https://api.github.com/user", ...),
+    fetch(`https://api.github.com/repos/${owner}/${repo}`, ...)
+]);
+```
+
+**Rate limits**: 60/hour unauthenticated, 5000/hour authenticated. Log errors to console, don't show user-facing alerts.
+
+### Fork Detection Logic
+
+1. Get current repo details to determine if it's a fork
+2. If fork, use `repoData.source` as source repo (handles transitive forks)
+3. Fetch paginated forks list from source repo (100 per page)
+4. Filter for user's personal account + their organizations
+5. Stop pagination early if forks found (performance optimization)
+
+### Import Flow
+
+Modern flow uses GitHub's official importer:
+
+1. Store import data in `sessionStorage` with timestamp
+2. Redirect to `https://github.com/new/import`
+3. `autofillImportForm()` detects import page, reads sessionStorage
+4. Auto-fills form fields (URL, name, description) with retry logic
+5. Shows purple banner with instructions (especially for private repos)
+
+**Key detail**: Import data expires after 30 seconds to prevent stale fills.
+
+## Storage Schema
+
+```javascript
+{
+    "githubToken": "ghp_..." | "github_pat_...",
+    "extensionSettings": {
+        showImportButton: boolean,
+        showQuickAccessLinks: boolean,
+        showForkUpstreamButtons: boolean,
+        showRawPageButtons: boolean
+    },
+    "quickAccessLinks": [
+        { name: string, url: string, color: "blue"|"yellow"|"green"|"purple", link_num: string }
+    ]
+}
+```
+
+Token validation requires `ghp_` or `github_pat_` prefix. Settings merge with defaults on load.
+
+## Development Workflows
+
+### Loading Extension
+
+1. `chrome://extensions/` → Enable "Developer mode"
+2. "Load unpacked" → Select repo root directory
+3. Configure token via popup (needs `repo` and `read:org` scopes)
 
 ### Testing Checklist
 
--   Test on repo you've forked (button should appear)
--   Test on repo you haven't forked (no button)
--   Test on your own repos (no button - don't show on own repos)
--   Test with multiple forks (dropdown should appear)
--   Test GitHub SPA navigation (button should persist across navigation)
--   Test token validation with invalid/missing scopes
+Context-specific scenarios:
+
+**GitHub pages**:
+
+-   Forked repo (buttons appear)
+-   Own repo (no buttons)
+-   Upstream repo not forked (no fork button, import button shows)
+-   Multiple forks (dropdown appears)
+-   SPA navigation (buttons persist)
+
+**Raw pages** (`raw.githubusercontent.com`, `gist.githubusercontent.com`):
+
+-   "Go to File/Gist" button in top-right
+-   "Copy All" button works with `<pre>` content
+
+**Settings**:
+
+-   Toggle each feature, verify UI updates without page reload
+-   Quick links: Add/remove/reorder, test color schemes
+-   Token reset: Verify buttons disappear
+
+### Debugging Tips
+
+-   Console logs prefixed with `GitHub Assistant:` show initialization flow
+-   Common issues:
+    -   **Buttons not appearing**: Check token validity, settings state, console errors
+    -   **Duplicate buttons**: Navigation handler should remove old elements first
+    -   **API failures**: Verify token scopes, check rate limits
+    -   **DOM not found**: GitHub changed selectors (update fallback chain)
 
 ### Common Pitfalls
 
--   **Button not appearing**: Check console logs prefixed with `GitHub Assistant:`
--   **Duplicate buttons**: Ensure `#go-to-fork-container` removal happens before injection
--   **API rate limits**: GitHub unauthenticated rate limit is 60/hour; authenticated is 5000/hour
--   **Header selector changes**: GitHub frequently updates their DOM structure; test against current GitHub UI
+-   Don't rely on page reloads for testing SPA navigation
+-   GitHub's DOM structure changes frequently - test against live github.com
+-   `sessionStorage` data persists only within same-origin tabs, not across navigations
+-   Quick access links use array index for positioning - maintain order when editing
 
-## File Reference
+## Key Files
 
--   **`src/manifest.json`**: Extension manifest, permissions, and content script configuration
--   **`src/content.js`**: Core fork detection and button injection logic (403 lines)
--   **`src/popup.js`**: Token management UI logic with validation
--   **`src/popup.html`**: Popup UI with setup/configured views
--   **`src/assets/`**: Extension icons (16px, 48px, 128px)
+-   [src/content.js](src/content.js): Core extension logic (init, API calls, UI injection)
+-   [src/popup.js](src/popup.js): Settings UI, token validation, quick links editor (form + JSON views)
+-   [src/manifest.json](src/manifest.json): Permissions, content script targets, host permissions
+-   [src/popup.html](src/popup.html): Popup UI with tabbed settings interface
 
-## External Dependencies
+## External APIs
 
--   **GitHub REST API v3**: Used for all data fetching
-    -   `/user` - Get authenticated user info
-    -   `/repos/:owner/:repo` - Get repository details
-    -   `/repos/:owner/:repo/forks` - List repository forks (paginated)
-    -   `/user/orgs` - List user organizations
+**GitHub REST API v3** - All endpoints:
+
+-   `GET /user` - Current user info
+-   `GET /user/orgs` - User's organizations (for fork detection + quick links reset)
+-   `GET /repos/:owner/:repo` - Repository details (fork status, parent, source)
+-   `GET /repos/:owner/:repo/forks` - List forks (paginated, 100/page)

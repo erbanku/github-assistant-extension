@@ -104,7 +104,9 @@ async function injectQuickAccessButtons() {
     }
 
     // Remove existing container if present
-    const existing = document.getElementById("github-assistant-quick-access");
+    const existing = document.getElementById(
+        "github-assistant-quick-access-li"
+    );
     if (existing) {
         existing.remove();
     }
@@ -121,32 +123,30 @@ async function injectQuickAccessButtons() {
         return;
     }
 
-    // Find header container
-    let headerContainer = document.querySelector(".AppHeader-context-full");
-    if (!headerContainer) {
-        headerContainer = document.querySelector(".AppHeader-globalBar");
-    }
-    if (!headerContainer) {
-        headerContainer = document.querySelector(".AppHeader");
-    }
-    if (!headerContainer) {
-        headerContainer = document.querySelector("header");
+    // Find the pagehead-actions list (contains Fork, Watch, Star buttons)
+    let actionsList = document.querySelector(
+        "#repository-details-container ul.pagehead-actions"
+    );
+    if (!actionsList) {
+        actionsList = document.querySelector("ul.pagehead-actions");
     }
 
-    if (!headerContainer) {
+    if (!actionsList) {
         console.log(
-            "GitHub Assistant: Could not find header container for quick access buttons"
+            "GitHub Assistant: Could not find pagehead-actions container for quick access buttons"
         );
         return;
     }
 
-    // Create container for quick access buttons
+    // Create list item container for quick access buttons
+    const listItem = document.createElement("li");
+    listItem.id = "github-assistant-quick-access-li";
+
     const container = document.createElement("div");
     container.id = "github-assistant-quick-access";
     container.style.cssText = `
         display: inline-flex;
         gap: 6px;
-        margin-left: 8px;
         align-items: center;
     `;
 
@@ -215,8 +215,11 @@ async function injectQuickAccessButtons() {
         container.appendChild(button);
     });
 
-    // Insert after the repo name (append to end of header container)
-    headerContainer.appendChild(container);
+    // Add container to list item
+    listItem.appendChild(container);
+
+    // Insert as first item in the pagehead-actions list
+    actionsList.insertBefore(listItem, actionsList.firstChild);
 
     console.log(
         `GitHub Assistant: Injected ${activeLinks.length} quick access button(s)`
