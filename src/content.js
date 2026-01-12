@@ -1025,25 +1025,27 @@ function addForkButton(forks) {
     // Prevent duplicate buttons
     if (document.getElementById("go-to-fork-container")) return;
 
-    // Simply append to the main repo header - fast and reliable
-    const repoHeader =
-        document.querySelector(".AppHeader-context-full") ||
-        document.querySelector(".AppHeader") ||
-        document.querySelector("header");
+    // Find the search button group in the top navigation
+    const searchButtonGroup =
+        document.querySelector(".Search-module__searchButtonGroup--L3A4O") ||
+        document.querySelector('[data-testid="top-nav-center"]');
 
-    if (!repoHeader) {
-        console.log("GitHub Assistant: Could not find header");
+    if (!searchButtonGroup) {
+        console.log(
+            "GitHub Assistant: Could not find search button group for fork button"
+        );
         return;
     }
 
     const container = createForkButtonContainer(forks);
 
-    // Add with some margin to separate from other elements
-    container.style.marginLeft = "4px";
+    // Add with some margin to separate from search box
+    container.style.marginRight = "8px";
     container.style.display = "inline-block";
 
-    repoHeader.appendChild(container);
-    console.log("GitHub Assistant: Button added successfully");
+    // Insert before the search button group
+    searchButtonGroup.parentNode.insertBefore(container, searchButtonGroup);
+    console.log("GitHub Assistant: Fork button added successfully");
 }
 
 function createForkButtonContainer(forks) {
@@ -1066,21 +1068,22 @@ function createForkButtonContainer(forks) {
         button.style.cssText = `
       display: inline-flex;
       align-items: center;
-      gap: 4px;
-      padding: 3px 4px;
+      gap: 6px;
+      padding: 5px 12px;
+      height: 32px;
       background-color: #238636;
       color: white !important;
       border: 1px solid rgba(27, 31, 36, 0.15);
       border-radius: 6px;
       text-decoration: none;
-      font-size: 12px;
+      font-size: 14px;
       font-weight: 500;
       cursor: pointer;
       white-space: nowrap;
       line-height: 20px;
     `;
         button.innerHTML = `
-      <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
         <path d="M5 5.372v.878c0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75v-.878a2.25 2.25 0 1 1 1.5 0v.878a2.25 2.25 0 0 1-2.25 2.25h-1.5v2.128a2.251 2.251 0 1 1-1.5 0V8.5h-1.5A2.25 2.25 0 0 1 3.5 6.25v-.878a2.25 2.25 0 1 1 1.5 0ZM5 3.25a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Zm6.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm-3 8.75a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Z"></path>
       </svg>
       Go to Fork
@@ -1106,21 +1109,22 @@ function createForkButtonContainer(forks) {
         mainBtn.style.cssText = `
       display: inline-flex;
       align-items: center;
-      gap: 4px;
-      padding: 3px 4px;
+      gap: 6px;
+      padding: 5px 12px;
+      height: 32px;
       background-color: #238636;
       color: white !important;
       border: 1px solid rgba(27, 31, 36, 0.15);
       border-radius: 6px 0 0 6px;
       text-decoration: none;
-      font-size: 12px;
+      font-size: 14px;
       font-weight: 500;
       cursor: pointer;
       white-space: nowrap;
       line-height: 20px;
     `;
         mainBtn.innerHTML = `
-      <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
         <path d="M5 5.372v.878c0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75v-.878a2.25 2.25 0 1 1 1.5 0v.878a2.25 2.25 0 0 1-2.25 2.25h-1.5v2.128a2.251 2.251 0 1 1-1.5 0V8.5h-1.5A2.25 2.25 0 0 1 3.5 6.25v-.878a2.25 2.25 0 1 1 1.5 0ZM5 3.25a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Zm6.75.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm-3 8.75a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0Z"></path>
       </svg>
       GitHub Assistant
@@ -1133,14 +1137,15 @@ function createForkButtonContainer(forks) {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      padding: 3px 6px;
+      padding: 5px 8px;
+      height: 32px;
       background-color: #238636;
       color: white;
       border: 1px solid rgba(27, 31, 36, 0.15);
       border-left: 1px solid rgba(255, 255, 255, 0.2);
       border-radius: 0 6px 6px 0;
       cursor: pointer;
-      font-size: 10px;
+      font-size: 12px;
       line-height: 20px;
     `;
         dropBtn.innerHTML = `
@@ -1234,14 +1239,14 @@ function addUpstreamButton(upstreamUrl, upstreamFullName) {
     // Prevent duplicate buttons
     if (document.getElementById("back-to-upstream-container")) return;
 
-    const repoHeader =
-        document.querySelector(".AppHeader-context-full") ||
-        document.querySelector(".AppHeader") ||
-        document.querySelector("header");
+    // Find the search button group in the top navigation
+    const searchButtonGroup =
+        document.querySelector(".Search-module__searchButtonGroup--L3A4O") ||
+        document.querySelector('[data-testid="top-nav-center"]');
 
-    if (!repoHeader) {
+    if (!searchButtonGroup) {
         console.log(
-            "GitHub Assistant: Could not find header for upstream button"
+            "GitHub Assistant: Could not find search button group for upstream button"
         );
         return;
     }
@@ -1251,10 +1256,11 @@ function addUpstreamButton(upstreamUrl, upstreamFullName) {
         upstreamFullName
     );
 
-    container.style.marginLeft = "4px";
+    container.style.marginRight = "8px";
     container.style.display = "inline-block";
 
-    repoHeader.appendChild(container);
+    // Insert before the search button group
+    searchButtonGroup.parentNode.insertBefore(container, searchButtonGroup);
     console.log("GitHub Assistant: Upstream button added successfully");
 }
 
@@ -1276,21 +1282,22 @@ function createUpstreamButtonContainer(upstreamUrl, upstreamFullName) {
     button.style.cssText = `
       display: inline-flex;
       align-items: center;
-      gap: 4px;
-      padding: 3px 4px;
+      gap: 6px;
+      padding: 5px 12px;
+      height: 32px;
       background-color: #0969da;
       color: white !important;
       border: 1px solid rgba(27, 31, 36, 0.15);
       border-radius: 6px;
       text-decoration: none;
-      font-size: 12px;
+      font-size: 14px;
       font-weight: 500;
       cursor: pointer;
       white-space: nowrap;
       line-height: 20px;
     `;
     button.innerHTML = `
-      <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
         <path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Zm9.78-2.22-5.5 5.5a.749.749 0 0 1-1.275-.326.749.749 0 0 1 .215-.734l5.5-5.5a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042Z"></path>
       </svg>
       Back to Upstream
@@ -1315,14 +1322,14 @@ function addImportButton(owner, repo, repoData, currentUser, githubToken) {
     // Prevent duplicate buttons
     if (document.getElementById("import-repo-container")) return;
 
-    const repoHeader =
-        document.querySelector(".AppHeader-context-full") ||
-        document.querySelector(".AppHeader") ||
-        document.querySelector("header");
+    // Find the search button group in the top navigation
+    const searchButtonGroup =
+        document.querySelector(".Search-module__searchButtonGroup--L3A4O") ||
+        document.querySelector('[data-testid="top-nav-center"]');
 
-    if (!repoHeader) {
+    if (!searchButtonGroup) {
         console.log(
-            "GitHub Assistant: Could not find header for import button"
+            "GitHub Assistant: Could not find search button group for import button"
         );
         return;
     }
@@ -1335,10 +1342,11 @@ function addImportButton(owner, repo, repoData, currentUser, githubToken) {
         githubToken
     );
 
-    container.style.marginLeft = "4px";
+    container.style.marginRight = "8px";
     container.style.display = "inline-block";
 
-    repoHeader.appendChild(container);
+    // Insert before the search button group
+    searchButtonGroup.parentNode.insertBefore(container, searchButtonGroup);
     console.log("GitHub Assistant: Import button added successfully");
 }
 
@@ -1366,14 +1374,15 @@ function createImportButtonContainer(
     button.style.cssText = `
         display: inline-flex;
         align-items: center;
-        gap: 4px;
-        padding: 3px 4px;
+        gap: 6px;
+        padding: 5px 12px;
+        height: 32px;
         background-color: #6639ba;
         color: white !important;
         border: 1px solid rgba(27, 31, 36, 0.15);
         border-radius: 6px;
         text-decoration: none;
-        font-size: 12px;
+        font-size: 14px;
         font-weight: 500;
         cursor: pointer;
         white-space: nowrap;
@@ -1381,7 +1390,7 @@ function createImportButtonContainer(
     `;
 
     button.innerHTML = `
-        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
             <path d="M1 2.5A2.5 2.5 0 0 1 3.5 0h8.75a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0V1.5h-8a1 1 0 0 0-1 1v6.708A2.493 2.493 0 0 1 3.5 9h3.25a.75.75 0 0 1 0 1.5H3.5a1 1 0 0 0 0 2h5.75a.75.75 0 0 1 0 1.5H3.5A2.5 2.5 0 0 1 1 11.5Zm13.23 7.79h-.001l-1.224-1.224v6.184a.75.75 0 0 1-1.5 0V9.066L10.28 10.29a.75.75 0 0 1-1.06-1.061l2.505-2.504a.75.75 0 0 1 1.06 0L15.29 9.23a.751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018Z"></path>
         </svg>
         Import Repository
