@@ -105,7 +105,7 @@ async function injectQuickAccessButtons() {
 
     // Remove existing container if present
     const existing = document.getElementById(
-        "github-assistant-quick-access-li"
+        "github-assistant-quick-access-container"
     );
     if (existing) {
         existing.remove();
@@ -123,31 +123,26 @@ async function injectQuickAccessButtons() {
         return;
     }
 
-    // Find the pagehead-actions list (contains Fork, Watch, Star buttons)
-    let actionsList = document.querySelector(
-        "#repository-details-container ul.pagehead-actions"
-    );
-    if (!actionsList) {
-        actionsList = document.querySelector("ul.pagehead-actions");
-    }
+    // Find the search button group in the top navigation
+    const searchButtonGroup =
+        document.querySelector(".Search-module__searchButtonGroup--L3A4O") ||
+        document.querySelector('[data-testid="top-nav-center"]');
 
-    if (!actionsList) {
+    if (!searchButtonGroup) {
         console.log(
-            "GitHub Assistant: Could not find pagehead-actions container for quick access buttons"
+            "GitHub Assistant: Could not find search button group for quick access buttons"
         );
         return;
     }
 
-    // Create list item container for quick access buttons
-    const listItem = document.createElement("li");
-    listItem.id = "github-assistant-quick-access-li";
-
+    // Create container for quick access buttons
     const container = document.createElement("div");
-    container.id = "github-assistant-quick-access";
+    container.id = "github-assistant-quick-access-container";
     container.style.cssText = `
         display: inline-flex;
         gap: 6px;
         align-items: center;
+        margin-right: 8px;
     `;
 
     // Color palette for buttons
@@ -189,18 +184,22 @@ async function injectQuickAccessButtons() {
         button.rel = "noopener noreferrer";
         button.className = "btn btn-sm";
         button.style.cssText = `
+            display: inline-flex;
+            align-items: center;
+            height: 32px;
             background: ${colorScheme.bg};
             color: ${colorScheme.text};
             border: 1px solid ${colorScheme.border};
-            padding: 3px 4px;
-            font-size: 12px;
+            padding: 5px 12px;
+            font-size: 14px;
             text-decoration: none;
             border-radius: 6px;
             white-space: nowrap;
             cursor: pointer;
             transition: background 0.2s ease;
-            font-weight: bold;
+            font-weight: 600;
             text-transform: uppercase;
+            line-height: 20px;
         `;
         button.textContent = displayName;
         button.title = `Quick access: ${link.url}`;
@@ -215,11 +214,8 @@ async function injectQuickAccessButtons() {
         container.appendChild(button);
     });
 
-    // Add container to list item
-    listItem.appendChild(container);
-
-    // Insert as first item in the pagehead-actions list
-    actionsList.insertBefore(listItem, actionsList.firstChild);
+    // Insert before the search button group
+    searchButtonGroup.parentNode.insertBefore(container, searchButtonGroup);
 
     console.log(
         `GitHub Assistant: Injected ${activeLinks.length} quick access button(s)`
