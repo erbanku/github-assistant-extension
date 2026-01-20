@@ -77,7 +77,7 @@ function handleImportRepo(owner, repo, repoData, currentUser, githubToken) {
             username: currentUser,
             token: githubToken,
             timestamp: Date.now(),
-        })
+        }),
     );
 
     // Redirect to GitHub's import page with just the URL
@@ -105,7 +105,7 @@ async function injectQuickAccessButtons() {
 
     // Remove existing container if present
     const existing = document.getElementById(
-        "github-assistant-quick-access-container"
+        "github-assistant-quick-access-container",
     );
     if (existing) {
         existing.remove();
@@ -130,7 +130,7 @@ async function injectQuickAccessButtons() {
 
     if (!searchButtonGroup) {
         console.log(
-            "GitHub Assistant: Could not find search button group for quick access buttons"
+            "GitHub Assistant: Could not find search button group for quick access buttons",
         );
         return;
     }
@@ -218,7 +218,7 @@ async function injectQuickAccessButtons() {
     searchButtonGroup.parentNode.insertBefore(container, searchButtonGroup);
 
     console.log(
-        `GitHub Assistant: Injected ${activeLinks.length} quick access button(s)`
+        `GitHub Assistant: Injected ${activeLinks.length} quick access button(s)`,
     );
 }
 
@@ -269,7 +269,7 @@ async function init() {
 
         if (!userResp.ok || !repoResp.ok) {
             console.log(
-                `GitHub Assistant: API request failed (user: ${userResp.status}, repo: ${repoResp.status})`
+                `GitHub Assistant: API request failed (user: ${userResp.status}, repo: ${repoResp.status})`,
             );
             return;
         }
@@ -309,7 +309,7 @@ async function init() {
                     currentUser,
                     sourceOwner,
                     sourceRepo,
-                    githubToken
+                    githubToken,
                 );
 
                 if (forks.length > 0) {
@@ -320,19 +320,19 @@ async function init() {
             // Show import button for repos not owned by user
             if (cachedSettings.showImportButton) {
                 console.log(
-                    `GitHub Assistant: Showing import button for ${owner}/${repo}`
+                    `GitHub Assistant: Showing import button for ${owner}/${repo}`,
                 );
                 addImportButton(
                     owner,
                     repo,
                     repoData,
                     currentUser,
-                    githubToken
+                    githubToken,
                 );
             }
         } else {
             console.log(
-                `GitHub Assistant: Skipping import button (own repo: ${owner}/${repo})`
+                `GitHub Assistant: Skipping import button (own repo: ${owner}/${repo})`,
             );
         }
     } catch (error) {
@@ -403,7 +403,7 @@ function autofillImportForm() {
 
     console.log(
         "GitHub Assistant: Auto-filling import form with data:",
-        importData
+        importData,
     );
 
     // Add a helpful banner
@@ -450,7 +450,7 @@ function autofillImportForm() {
         // Find the button container and insert banner right after it
         const buttonContainer =
             document.querySelector(
-                '[data-direction="horizontal"][data-justify="end"]'
+                '[data-direction="horizontal"][data-justify="end"]',
             ) ||
             document
                 .querySelector('button[type="submit"]')
@@ -460,7 +460,7 @@ function autofillImportForm() {
             // Insert right after the button container
             buttonContainer.parentNode.insertBefore(
                 banner,
-                buttonContainer.nextSibling
+                buttonContainer.nextSibling,
             );
         } else {
             // Fallback: append to content area
@@ -490,7 +490,7 @@ function autofillImportForm() {
 
         // Find all input fields for debugging
         const allInputs = document.querySelectorAll(
-            'input[type="text"], input[type="url"], input:not([type])'
+            'input[type="text"], input[type="url"], input:not([type])',
         );
         console.log(
             "GitHub Assistant: Found input fields:",
@@ -499,7 +499,7 @@ function autofillImportForm() {
                 id: i.id,
                 type: i.type,
                 placeholder: i.placeholder,
-            }))
+            })),
         );
 
         // Fill the clone URL field - try multiple selectors
@@ -528,7 +528,7 @@ function autofillImportForm() {
             // Use native setter to bypass React
             const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
                 window.HTMLInputElement.prototype,
-                "value"
+                "value",
             ).set;
             nativeInputValueSetter.call(urlInput, importData.url);
 
@@ -551,7 +551,7 @@ function autofillImportForm() {
             console.log("GitHub Assistant: Found name input:", nameInput);
             const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
                 window.HTMLInputElement.prototype,
-                "value"
+                "value",
             ).set;
             nativeInputValueSetter.call(nameInput, importData.name);
 
@@ -574,17 +574,17 @@ function autofillImportForm() {
                 console.log("GitHub Assistant: Found username input");
                 const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
                     window.HTMLInputElement.prototype,
-                    "value"
+                    "value",
                 ).set;
                 nativeInputValueSetter.call(usernameInput, importData.username);
                 usernameInput.dispatchEvent(
-                    new Event("input", { bubbles: true })
+                    new Event("input", { bubbles: true }),
                 );
                 usernameInput.dispatchEvent(
-                    new Event("change", { bubbles: true })
+                    new Event("change", { bubbles: true }),
                 );
                 usernameInput.dispatchEvent(
-                    new Event("blur", { bubbles: true })
+                    new Event("blur", { bubbles: true }),
                 );
             }
 
@@ -597,17 +597,17 @@ function autofillImportForm() {
                 console.log("GitHub Assistant: Found password input");
                 const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
                     window.HTMLInputElement.prototype,
-                    "value"
+                    "value",
                 ).set;
                 nativeInputValueSetter.call(passwordInput, importData.token);
                 passwordInput.dispatchEvent(
-                    new Event("input", { bubbles: true })
+                    new Event("input", { bubbles: true }),
                 );
                 passwordInput.dispatchEvent(
-                    new Event("change", { bubbles: true })
+                    new Event("change", { bubbles: true }),
                 );
                 passwordInput.dispatchEvent(
-                    new Event("blur", { bubbles: true })
+                    new Event("blur", { bubbles: true }),
                 );
             }
         }
@@ -656,7 +656,7 @@ function autofillImportForm() {
  */
 function parseGistRawUrl(url) {
     const match = url.match(
-        /gist\.githubusercontent\.com\/([^\/]+)\/([^\/]+)\/raw\/[^\/]+\/(.+)$/
+        /gist\.githubusercontent\.com\/([^\/]+)\/([^\/]+)\/raw\/[^\/]+\/(.+)$/,
     );
     if (!match) return null;
 
@@ -678,7 +678,7 @@ function parseGistRawUrl(url) {
  */
 function parseRepoRawUrl(url) {
     const match = url.match(
-        /raw\.githubusercontent\.com\/([^\/]+)\/([^\/]+)\/([^\/]+)\/(.+)/
+        /raw\.githubusercontent\.com\/([^\/]+)\/([^\/]+)\/([^\/]+)\/(.+)/,
     );
     if (!match) return null;
 
@@ -835,6 +835,176 @@ function addRawPageButton(targetUrl, buttonText) {
 }
 
 /**
+ * Check if the current page contains JSON content and format it
+ */
+function formatJSONContent() {
+    try {
+        // Get the main content element
+        const preElement = document.querySelector("pre");
+        if (!preElement) {
+            return false;
+        }
+
+        // Get the raw text content
+        const rawContent = (
+            preElement.innerText || preElement.textContent
+        ).trim();
+
+        // Check if it's valid JSON
+        try {
+            const jsonData = JSON.parse(rawContent);
+
+            // Store original content for toggling
+            if (!preElement.dataset.originalContent) {
+                preElement.dataset.originalContent = rawContent;
+                preElement.dataset.isFormatted = "false";
+            }
+
+            // Format JSON with 2-space indentation
+            const formattedJSON = JSON.stringify(jsonData, null, 2);
+
+            // Apply formatted content
+            preElement.textContent = formattedJSON;
+            preElement.dataset.isFormatted = "true";
+
+            // Add styling for better readability
+            preElement.style.whiteSpace = "pre";
+            preElement.style.fontFamily = "monospace";
+            preElement.style.fontSize = "14px";
+            preElement.style.lineHeight = "1.5";
+
+            console.log(
+                "GitHub Assistant: JSON content formatted successfully",
+            );
+            return true;
+        } catch (parseError) {
+            // Not valid JSON or already formatted
+            return false;
+        }
+    } catch (error) {
+        console.error("GitHub Assistant: Error formatting JSON:", error);
+        return false;
+    }
+}
+
+/**
+ * Toggle between formatted and original JSON
+ */
+function toggleJSONFormat() {
+    const preElement = document.querySelector("pre");
+    if (!preElement || !preElement.dataset.originalContent) {
+        return;
+    }
+
+    const isFormatted = preElement.dataset.isFormatted === "true";
+
+    if (isFormatted) {
+        // Show original
+        preElement.textContent = preElement.dataset.originalContent;
+        preElement.dataset.isFormatted = "false";
+    } else {
+        // Show formatted
+        try {
+            const jsonData = JSON.parse(preElement.dataset.originalContent);
+            preElement.textContent = JSON.stringify(jsonData, null, 2);
+            preElement.dataset.isFormatted = "true";
+        } catch (error) {
+            console.error(
+                "GitHub Assistant: Error toggling JSON format:",
+                error,
+            );
+        }
+    }
+}
+
+/**
+ * Add format toggle button for JSON files
+ */
+function addFormatToggleButton() {
+    const preElement = document.querySelector("pre");
+    if (!preElement || !preElement.dataset.originalContent) {
+        return;
+    }
+
+    const container = document.getElementById("go-to-source-container");
+    if (!container) {
+        return;
+    }
+
+    // Check if button already exists
+    if (document.getElementById("format-json-button")) {
+        return;
+    }
+
+    const formatButton = document.createElement("button");
+    formatButton.id = "format-json-button";
+    formatButton.style.cssText = `
+        padding: 8px 16px;
+        background-color: #8250df;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+        transition: background-color 0.2s;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    `;
+
+    formatButton.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M0 3.75C0 2.784.784 2 1.75 2h12.5c.966 0 1.75.784 1.75 1.75v8.5A1.75 1.75 0 0 1 14.25 14H1.75A1.75 1.75 0 0 1 0 12.25Zm1.75-.25a.25.25 0 0 0-.25.25v8.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-8.5a.25.25 0 0 0-.25-.25ZM3.5 6.25a.75.75 0 0 1 .75-.75h7a.75.75 0 0 1 0 1.5h-7a.75.75 0 0 1-.75-.75Zm.75 2.25h4a.75.75 0 0 1 0 1.5h-4a.75.75 0 0 1 0-1.5Z"></path>
+        </svg>
+        Toggle Format
+    `;
+
+    formatButton.title = "Toggle between formatted and original JSON";
+
+    formatButton.addEventListener("mouseover", () => {
+        formatButton.style.backgroundColor = "#7c52cc";
+    });
+    formatButton.addEventListener("mouseout", () => {
+        formatButton.style.backgroundColor = "#8250df";
+    });
+
+    formatButton.addEventListener("click", () => {
+        toggleJSONFormat();
+
+        // Update button text based on current state
+        const preElement = document.querySelector("pre");
+        const isFormatted = preElement?.dataset.isFormatted === "true";
+
+        if (isFormatted) {
+            formatButton.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M0 3.75C0 2.784.784 2 1.75 2h12.5c.966 0 1.75.784 1.75 1.75v8.5A1.75 1.75 0 0 1 14.25 14H1.75A1.75 1.75 0 0 1 0 12.25Zm1.75-.25a.25.25 0 0 0-.25.25v8.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-8.5a.25.25 0 0 0-.25-.25ZM3.5 6.25a.75.75 0 0 1 .75-.75h7a.75.75 0 0 1 0 1.5h-7a.75.75 0 0 1-.75-.75Zm.75 2.25h4a.75.75 0 0 1 0 1.5h-4a.75.75 0 0 1 0-1.5Z"></path>
+                </svg>
+                Toggle Format
+            `;
+        } else {
+            formatButton.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M0 3.75C0 2.784.784 2 1.75 2h12.5c.966 0 1.75.784 1.75 1.75v8.5A1.75 1.75 0 0 1 14.25 14H1.75A1.75 1.75 0 0 1 0 12.25Zm1.75-.25a.25.25 0 0 0-.25.25v8.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25v-8.5a.25.25 0 0 0-.25-.25ZM3.5 6.25a.75.75 0 0 1 .75-.75h7a.75.75 0 0 1 0 1.5h-7a.75.75 0 0 1-.75-.75Zm.75 2.25h4a.75.75 0 0 1 0 1.5h-4a.75.75 0 0 1 0-1.5Z"></path>
+                </svg>
+                Toggle Format
+            `;
+        }
+    });
+
+    // Insert the format button before the copy button (as second button)
+    const copyButton = container.querySelector("button:nth-child(2)");
+    if (copyButton) {
+        container.insertBefore(formatButton, copyButton);
+    } else {
+        container.appendChild(formatButton);
+    }
+}
+
+/**
  * Initialize raw page handler - detects if we're on a raw page and adds appropriate button
  */
 async function initRawPage() {
@@ -855,9 +1025,15 @@ async function initRawPage() {
         const gistUrl = parseGistRawUrl(currentUrl);
         if (gistUrl) {
             console.log(
-                "GitHub Assistant: Detected gist raw page, adding button"
+                "GitHub Assistant: Detected gist raw page, adding button",
             );
             addRawPageButton(gistUrl, "Go to Gist");
+
+            // Try to format JSON content
+            const isJSON = formatJSONContent();
+            if (isJSON) {
+                addFormatToggleButton();
+            }
         }
         return;
     }
@@ -867,9 +1043,15 @@ async function initRawPage() {
         const fileUrl = parseRepoRawUrl(currentUrl);
         if (fileUrl) {
             console.log(
-                "GitHub Assistant: Detected repo raw page, adding button"
+                "GitHub Assistant: Detected repo raw page, adding button",
             );
             addRawPageButton(fileUrl, "Go to File");
+
+            // Try to format JSON content
+            const isJSON = formatJSONContent();
+            if (isJSON) {
+                addFormatToggleButton();
+            }
         }
         return;
     }
@@ -892,7 +1074,7 @@ function handleNavigation() {
     const url = location.href;
     if (url !== lastUrl) {
         console.log(
-            `GitHub Assistant: Navigation detected from ${lastUrl} to ${url}`
+            `GitHub Assistant: Navigation detected from ${lastUrl} to ${url}`,
         );
         lastUrl = url;
 
@@ -937,7 +1119,7 @@ async function findAllForks(currentUser, sourceOwner, sourceRepo, githubToken) {
     userOrgs.add(currentUser);
 
     console.log(
-        `GitHub Assistant: Searching forks for ${sourceOwner}/${sourceRepo}`
+        `GitHub Assistant: Searching forks for ${sourceOwner}/${sourceRepo}`,
     );
 
     // Get user's organizations
@@ -949,7 +1131,7 @@ async function findAllForks(currentUser, sourceOwner, sourceRepo, githubToken) {
                     Accept: "application/vnd.github.v3+json",
                     Authorization: `token ${githubToken}`,
                 },
-            }
+            },
         );
 
         if (orgsResp.ok) {
@@ -973,12 +1155,12 @@ async function findAllForks(currentUser, sourceOwner, sourceRepo, githubToken) {
                         Accept: "application/vnd.github.v3+json",
                         Authorization: `token ${githubToken}`,
                     },
-                }
+                },
             );
 
             if (!forksResp.ok) {
                 console.log(
-                    `GitHub Assistant: Failed to fetch forks (status ${forksResp.status})`
+                    `GitHub Assistant: Failed to fetch forks (status ${forksResp.status})`,
                 );
                 break;
             }
@@ -1028,7 +1210,7 @@ function addForkButton(forks) {
 
     if (!searchButtonGroup) {
         console.log(
-            "GitHub Assistant: Could not find search button group for fork button"
+            "GitHub Assistant: Could not find search button group for fork button",
         );
         return;
     }
@@ -1242,14 +1424,14 @@ function addUpstreamButton(upstreamUrl, upstreamFullName) {
 
     if (!searchButtonGroup) {
         console.log(
-            "GitHub Assistant: Could not find search button group for upstream button"
+            "GitHub Assistant: Could not find search button group for upstream button",
         );
         return;
     }
 
     const container = createUpstreamButtonContainer(
         upstreamUrl,
-        upstreamFullName
+        upstreamFullName,
     );
 
     container.style.marginRight = "8px";
@@ -1325,7 +1507,7 @@ function addImportButton(owner, repo, repoData, currentUser, githubToken) {
 
     if (!searchButtonGroup) {
         console.log(
-            "GitHub Assistant: Could not find search button group for import button"
+            "GitHub Assistant: Could not find search button group for import button",
         );
         return;
     }
@@ -1335,7 +1517,7 @@ function addImportButton(owner, repo, repoData, currentUser, githubToken) {
         repo,
         repoData,
         currentUser,
-        githubToken
+        githubToken,
     );
 
     container.style.marginRight = "8px";
@@ -1351,7 +1533,7 @@ function createImportButtonContainer(
     repo,
     repoData,
     currentUser,
-    githubToken
+    githubToken,
 ) {
     const container = document.createElement("div");
     container.id = "import-repo-container";
