@@ -1918,8 +1918,9 @@ async function initHotkeys() {
 
         // Add key to combo state
         comboState.keys.push(key);
+        const currentSequence = comboState.keys.join('');
 
-        // Check for navigation hotkey combos
+        // Check for navigation hotkey combos (array format like ['g', 'f'])
         let navHotkeys = cachedSettings.navHotkeys || DEFAULT_SETTINGS.navHotkeys;
 
         // Validate navHotkeys array exists and has items
@@ -1928,6 +1929,7 @@ async function initHotkeys() {
             navHotkeys = DEFAULT_SETTINGS.navHotkeys;
         }
 
+        // Check built-in navHotkeys (array format)
         for (const hotkey of navHotkeys) {
             // Skip invalid hotkey entries
             if (!hotkey || !hotkey.keys || !Array.isArray(hotkey.keys)) {
@@ -1947,6 +1949,21 @@ async function initHotkeys() {
             }
         }
 
+        // Check custom hotkeys (string format)
+        const customHotkeys = cachedSettings.customHotkeys || [];
+        for (const customHotkey of customHotkeys) {
+            if (customHotkey.keys && customHotkey.url) {
+                if (currentSequence === customHotkey.keys.toLowerCase()) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    window.location.href = customHotkey.url;
+                    comboState.keys = [];
+                    clearTimeout(comboState.timeout);
+                    return;
+                }
+            }
+        }
+
         // Check for prefix match - keep waiting for more keys
         const hasPrefix = navHotkeys.some((hotkey) => {
             // Skip invalid hotkeys
@@ -1959,7 +1976,12 @@ async function initHotkeys() {
             );
         });
 
-        if (hasPrefix) {
+        // Also check if current sequence is a prefix of any custom hotkey
+        const hasCustomPrefix = customHotkeys.some(customHotkey => {
+            return customHotkey.keys && customHotkey.keys.toLowerCase().startsWith(currentSequence);
+        });
+
+        if (hasPrefix || hasCustomPrefix) {
             event.preventDefault();
             event.stopPropagation();
             // Set timeout to reset if no more keys come

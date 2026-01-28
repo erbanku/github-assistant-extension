@@ -800,118 +800,207 @@ configRawPage.addEventListener("change", saveConfiguredSettings);
 configHotkeys.addEventListener("change", saveConfiguredSettings);
 
 // ===============================================
-// Hotkey Management
+// Custom Hotkeys Management
 // ===============================================
 
-let currentHotkeys = [];
+const customHotkeysList = document.getElementById("custom-hotkeys-list");
+const addHotkeyBtn = document.getElementById("add-hotkey-btn");
 
-// Load hotkeys from storage
-async function loadHotkeys() {
+let customHotkeys = [];
+
+// Load custom hotkeys from storage
+async function loadCustomHotkeys() {
     return new Promise((resolve) => {
         chrome.storage.sync.get(["extensionSettings"], (result) => {
             const settings = result.extensionSettings || {};
-            const defaultHotkeys = [
-                { keys: ['g', 'v'], name: 'Repo Owner Homepage', url: null, dynamic: true, urlType: 'owner-home' },
-                { keys: ['g', 'h'], name: 'Repo Owner Homepage Alt', url: null, dynamic: true, urlType: 'owner-home' },
-                { keys: ['g', 'd'], name: 'Dashboard', url: null, dynamic: true, urlType: 'dashboard' },
-                { keys: ['g', 'f'], name: 'Repo Owner Feed', url: null, dynamic: true, urlType: 'owner-feed' },
-                { keys: ['g', 'c'], name: 'GitHub Copilot', url: 'https://github.com/copilot', dynamic: false, urlType: 'static' },
-            ];
-            // Load from extensionSettings.navHotkeys, fallback to defaults
-            currentHotkeys = settings.navHotkeys || defaultHotkeys;
-            resolve(currentHotkeys);
+            customHotkeys = settings.customHotkeys || [];
+            resolve(customHotkeys);
         });
     });
 }
 
-// Render hotkey editor
-async function renderHotkeyEditor() {
-    await loadHotkeys();
-    hotkeysList.innerHTML = '';
+// Render custom hotkeys editor
+async function renderCustomHotkeys() {
+    await loadCustomHotkeys();
+    customHotkeysList.innerHTML = '';
 
-    currentHotkeys.forEach((hotkey, index) => {
+    if (customHotkeys.length === 0) {
+        customHotkeysList.innerHTML = '<div style="text-align: center; color: #57606a; padding: 12px; font-size: 12px;">No custom hotkeys. Click "+ Add Custom Hotkey" to create one.</div>';
+        return;
+    }
+
+    customHotkeys.forEach((hotkey, index) => {
         const item = document.createElement('div');
-        item.className = 'hotkey-item';
+        item.className = 'custom-hotkey-item';
 
-        const info = document.createElement('div');
-        info.className = 'hotkey-info';
+        item.innerHTML = `
+            <div class="hotkey-input-label">Keys (max 10 chars, case-insensitive)</div>
+            <input type="text" class="hotkey-keys" placeholder="e.g., gl, gpr, mykey" value="${hotkey.keys || ''}" maxlength="10" data-index="${index}" />
+            <div class="hotkey-input-label">URL</div>
+            <input type="text" class="hotkey-url" placeholder="https://example.com" value="${hotkey.url || ''}" data-index="${index}" />
+            <button class="custom-hotkey-remove" data-index="${index}">Remove</button>
+        `;
 
-        const nameDiv = document.createElement('div');
-        nameDiv.className = 'hotkey-name';
-        nameDiv.textContent = hotkey.name;
+        customHotkeysList.appendChild(item);
+    });
 
-        const displayDiv = document.createElement('div');
-        displayDiv.className = 'hotkey-display';
-        displayDiv.innerHTML = `<strong>${hotkey.keys.join(' + ')}</strong> → ${hotkey.dynamic ? `[Dynamic: ${hotkey.urlType}]` : hotkey.url}`;
-
-        info.appendChild(nameDiv);
-        info.appendChild(displayDiv);
-
-        const editDiv = document.createElement('div');
-        editDiv.className = 'hotkey-edit';
-
-        const keysInput = document.createElement('input');
-        keysInput.type = 'text';
-        keysInput.className = 'hotkey-key-input';
-        keysInput.placeholder = 'e.g., g+v';
-        keysInput.value = hotkey.keys.join('+');
-        keysInput.title = 'Use + to separate keys';
-
-        const urlInput = document.createElement('input');
-        urlInput.type = 'text';
-        urlInput.className = 'hotkey-url-input';
-        urlInput.placeholder = hotkey.dynamic ? '[Dynamic]' : 'Custom URL';
-        urlInput.value = hotkey.url || '';
-        urlInput.disabled = hotkey.dynamic;
-
-        editDiv.appendChild(keysInput);
-        editDiv.appendChild(urlInput);
-
-        // Store references for later saving
-        hotkey._keysInput = keysInput;
-        hotkey._urlInput = urlInput;
-
-        item.appendChild(info);
-        item.appendChild(editDiv);
-        hotkeysList.appendChild(item);
+    // Add event listeners for remove buttons
+    document.querySelectorAll('.custom-hotkey-remove').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const index = parseInt(e.target.dataset.index);
+            customHotkeys.splice(index, 1);
+            renderCustomHotkeys();
+        });
     });
 }
 
-// Show hotkey editor
+// Add new custom hotkey
+addHotkeyBtn.addEventListener('click', () => {
+    customHotkeys.push({ keys: '', url: '' });
+    renderCustomHotkeys();
+});
+
+// Show custom hotkeys editor
 editHotkeysBtn.addEventListener('click', async () => {
-    await renderHotkeyEditor();
+    await renderCustomHotkeys();
     hotkeyEditorDiv.style.display = 'block';
     editHotkeysBtn.style.display = 'none';
 });
 
-// Save hotkeys
+// Save custom hotkeys
 saveHotkeysBtn.addEventListener('click', async () => {
-    const updatedHotkeys = currentHotkeys.map((hotkey) => ({
-        ...hotkey,
-        keys: hotkey._keysInput.value.split('+').map(k => k.trim().toLowerCase()),
-        url: hotkey.dynamic ? hotkey.url : hotkey._urlInput.value || null,
-    }));
+    // Collect all hotkey data from inputs
+    const updatedHotkeys = [];
+    document.querySelectorAll('.custom-hotkey-item').forEach(item => {
+        const keysInput = item.querySelector('.hotkey-keys');
+        const urlInput = item.querySelector('.hotkey-url');
+        const keys = keysInput.value.trim().toLowerCase();
+        const url = urlInput.value.trim();
 
-    // Load existing settings and update navHotkeys
+        if (keys && url) {
+            // Validate URL
+            try {
+                new URL(url);
+                updatedHotkeys.push({ keys, url });
+            } catch (e) {
+                showStatus(`Invalid URL: ${url}`, 'error');
+                return;
+            }
+        }
+    });
+
+    // Load existing settings and update customHotkeys
     const result = await new Promise((resolve) => {
         chrome.storage.sync.get(['extensionSettings'], resolve);
     });
     const settings = result.extensionSettings || {};
-    settings.navHotkeys = updatedHotkeys;
+    settings.customHotkeys = updatedHotkeys;
 
     // Save back to extensionSettings
     chrome.storage.sync.set({ extensionSettings: settings }, () => {
         hotkeyEditorDiv.style.display = 'none';
         editHotkeysBtn.style.display = 'block';
-        showStatus('Hotkeys saved successfully!', 'success');
+        showStatus('✓ Custom hotkeys saved successfully!', 'success');
+        setTimeout(() => statusDiv.style.display = 'none', 2000);
     });
 });
 
-// Cancel hotkey editor
+// Cancel custom hotkeys editor
 cancelHotkeysBtn.addEventListener('click', () => {
     hotkeyEditorDiv.style.display = 'none';
     editHotkeysBtn.style.display = 'block';
 });
+
+// ===============================================
+// All Settings JSON Editor
+// ===============================================
+
+const viewAllSettingsBtn = document.getElementById("view-all-settings-btn");
+const allSettingsEditor = document.getElementById("all-settings-editor");
+const allSettingsJson = document.getElementById("all-settings-json");
+const allSettingsLineNumbers = document.getElementById("all-settings-line-numbers");
+const allSettingsError = document.getElementById("all-settings-error");
+const saveAllSettingsBtn = document.getElementById("save-all-settings-btn");
+const cancelAllSettingsBtn = document.getElementById("cancel-all-settings-btn");
+
+// Update line numbers for all settings JSON
+function updateAllSettingsLineNumbers() {
+    const lines = allSettingsJson.value.split('\n');
+    allSettingsLineNumbers.innerHTML = lines.map((_, i) => `<div>${i + 1}</div>`).join('');
+}
+
+// Show all settings editor
+viewAllSettingsBtn.addEventListener('click', async () => {
+    // Load all settings
+    const result = await new Promise((resolve) => {
+        chrome.storage.sync.get(['githubToken', 'quickAccessLinks', 'extensionSettings'], resolve);
+    });
+
+    const allSettings = {
+        githubToken: result.githubToken || '',
+        quickAccessLinks: result.quickAccessLinks || [],
+        extensionSettings: result.extensionSettings || {}
+    };
+
+    allSettingsJson.value = JSON.stringify(allSettings, null, 2);
+    updateAllSettingsLineNumbers();
+    allSettingsEditor.style.display = 'block';
+    viewAllSettingsBtn.style.display = 'none';
+    allSettingsError.classList.remove('show');
+});
+
+// Save all settings from JSON
+saveAllSettingsBtn.addEventListener('click', async () => {
+    try {
+        const allSettings = JSON.parse(allSettingsJson.value);
+
+        // Validate structure
+        if (typeof allSettings !== 'object') {
+            throw new Error('Settings must be an object');
+        }
+
+        // Save to storage
+        await new Promise((resolve, reject) => {
+            chrome.storage.sync.set({
+                githubToken: allSettings.githubToken || '',
+                quickAccessLinks: allSettings.quickAccessLinks || [],
+                extensionSettings: allSettings.extensionSettings || {}
+            }, () => {
+                if (chrome.runtime.lastError) {
+                    reject(chrome.runtime.lastError);
+                } else {
+                    resolve();
+                }
+            });
+        });
+
+        allSettingsEditor.style.display = 'none';
+        viewAllSettingsBtn.style.display = 'block';
+        showStatus('✓ All settings saved successfully!', 'success');
+        setTimeout(() => {
+            statusDiv.style.display = 'none';
+            // Reload the page to show updated settings
+            location.reload();
+        }, 1500);
+    } catch (e) {
+        allSettingsError.textContent = `Error: ${e.message}`;
+        allSettingsError.classList.add('show');
+    }
+});
+
+// Cancel all settings editor
+cancelAllSettingsBtn.addEventListener('click', () => {
+    allSettingsEditor.style.display = 'none';
+    viewAllSettingsBtn.style.display = 'block';
+    allSettingsError.classList.remove('show');
+});
+
+// Update line numbers on input
+allSettingsJson.addEventListener('input', updateAllSettingsLineNumbers);
+
+// ===============================================
+// Legacy Hotkey Management (Keep for compatibility)
+// ===============================================
 
 // Load hotkeys on page load
 document.addEventListener('DOMContentLoaded', async () => {

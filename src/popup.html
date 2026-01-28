@@ -489,6 +489,51 @@
             font-size: 11px;
             white-space: nowrap;
         }
+
+        .custom-hotkey-item {
+            padding: 12px;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            background: #f6f8fa;
+        }
+
+        .custom-hotkey-item input {
+            width: 100%;
+            padding: 6px 8px;
+            border: 1px solid #d0d7de;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-bottom: 6px;
+            box-sizing: border-box;
+        }
+
+        .custom-hotkey-item input[type="text"]:first-child {
+            font-family: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
+        }
+
+        .custom-hotkey-item .hotkey-input-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: #57606a;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+        }
+
+        .custom-hotkey-remove {
+            background: #cf222e;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            cursor: pointer;
+            margin-top: 4px;
+        }
+
+        .custom-hotkey-remove:hover {
+            background: #a40e26;
+        }
     </style>
 </head>
 
@@ -689,17 +734,35 @@
         <div class="setup-section">
             <label>Custom Navigation Hotkeys</label>
             <div class="help-text" style="margin-bottom: 12px;">
-                Customize hotkey combos and URLs for quick navigation
+                Add custom hotkey combinations (max 10 chars, case-insensitive) to navigate to any URL
             </div>
-            <button id="edit-hotkeys-btn" class="btn btn-secondary btn-block">Edit Hotkeys</button>
+            <button id="edit-hotkeys-btn" class="btn btn-secondary btn-block">Manage Custom Hotkeys</button>
             <div id="hotkeys-editor" style="display: none; margin-top: 12px;">
-                <div id="hotkeys-list"
-                    style="max-height: 300px; overflow-y: auto; border: 1px solid #d0d7de; border-radius: 6px; margin-bottom: 12px;">
+                <div id="custom-hotkeys-list" style="margin-bottom: 12px;">
                     <!-- Dynamically populated -->
                 </div>
+                <button id="add-hotkey-btn" class="btn btn-secondary btn-block" style="margin-bottom: 8px;">+ Add Custom Hotkey</button>
                 <button id="save-hotkeys-btn" class="btn btn-block">Save Hotkeys</button>
                 <button id="cancel-hotkeys-btn" class="btn btn-secondary btn-block"
                     style="margin-top: 8px;">Cancel</button>
+            </div>
+        </div>
+
+        <div class="setup-section">
+            <label>All Settings (JSON)</label>
+            <div class="help-text" style="margin-bottom: 12px;">
+                View and edit all extension settings including token, quick links, and custom hotkeys
+            </div>
+            <button id="view-all-settings-btn" class="btn btn-secondary btn-block">View/Edit All Settings</button>
+            <div id="all-settings-editor" style="display: none; margin-top: 12px;">
+                <div class="json-editor-wrapper">
+                    <div class="json-line-numbers" id="all-settings-line-numbers"></div>
+                    <textarea id="all-settings-json" style="min-height: 300px; flex: 1; padding: 8px 12px; border: none; font-size: 12px; font-family: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace; resize: vertical; line-height: 1.5;"></textarea>
+                </div>
+                <div class="json-help">Edit all settings as JSON. Be careful - invalid JSON will cause errors.</div>
+                <div id="all-settings-error" class="json-error"></div>
+                <button id="save-all-settings-btn" class="btn btn-block" style="margin-top: 12px;">Save All Settings</button>
+                <button id="cancel-all-settings-btn" class="btn btn-secondary btn-block" style="margin-top: 8px;">Cancel</button>
             </div>
         </div>
     </div>
