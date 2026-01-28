@@ -3,12 +3,26 @@ let cachedQuickAccessLinks = null;
 let cachedGithubToken = null;
 let cachedSettings = null;
 
+// Global flag to ensure hotkeys are only initialized once
+let hotkeysInitialized = false;
+
 // Default settings - all features enabled by default
 const DEFAULT_SETTINGS = {
     showImportButton: true,
     showQuickAccessLinks: true,
     showForkUpstreamButtons: true,
     showRawPageButtons: true,
+    enableHotkeys: true,
+    navHotkeys: [
+        { keys: ['g', 'v'], name: 'Repo Owner Homepage', url: null, dynamic: true, urlType: 'owner-home' },
+        { keys: ['g', 'h'], name: 'Repo Owner Homepage Alt', url: null, dynamic: true, urlType: 'owner-home' },
+        { keys: ['g', 'd'], name: 'Dashboard', url: null, dynamic: true, urlType: 'dashboard' },
+        { keys: ['g', 'f'], name: 'Repo Owner Feed/Dashboard', url: null, dynamic: true, urlType: 'owner-feed' },
+        { keys: ['g', 't'], name: 'Packages Page', url: null, dynamic: true, urlType: 'packages' },
+        { keys: ['g', 'g'], name: 'My Gists', url: null, dynamic: true, urlType: 'gists' },
+        { keys: ['g', 'l'], name: 'Linear', url: 'https://linear.app', dynamic: false, urlType: 'static' },
+        { keys: ['g', 'c'], name: 'GitHub Copilot', url: 'https://github.com/copilot', dynamic: false, urlType: 'static' },
+    ],
 };
 
 // Load quick access links into cache
@@ -32,10 +46,34 @@ async function loadSettingsCache() {
     const result = await new Promise((resolve) => {
         chrome.storage.sync.get(["extensionSettings"], resolve);
     });
+    const stored = result.extensionSettings || {};
+
     cachedSettings = {
         ...DEFAULT_SETTINGS,
-        ...(result.extensionSettings || {}),
+        ...stored,
     };
+
+    // Ensure navHotkeys is a valid array with proper structure
+    if (!Array.isArray(cachedSettings.navHotkeys)) {
+        cachedSettings.navHotkeys = DEFAULT_SETTINGS.navHotkeys;
+    } else if (cachedSettings.navHotkeys.length === 0) {
+        // If array is empty, use default
+        cachedSettings.navHotkeys = DEFAULT_SETTINGS.navHotkeys;
+    } else {
+        // Validate each hotkey entry has required properties
+        cachedSettings.navHotkeys = cachedSettings.navHotkeys.filter((hotkey) => {
+            return hotkey &&
+                   hotkey.keys &&
+                   Array.isArray(hotkey.keys) &&
+                   hotkey.keys.length > 0 &&
+                   hotkey.urlType;
+        });
+
+        // If all hotkeys were filtered out, use defaults
+        if (cachedSettings.navHotkeys.length === 0) {
+            cachedSettings.navHotkeys = DEFAULT_SETTINGS.navHotkeys;
+        }
+    }
 }
 
 // Listen for storage changes to update cache
@@ -1062,6 +1100,7 @@ async function initRawPage() {
 init();
 autofillImportForm();
 initRawPage();
+initHotkeys();
 
 // Handle GitHub's SPA navigation with better detection
 let lastUrl = location.href;
@@ -1490,6 +1529,620 @@ function createUpstreamButtonContainer(upstreamUrl, upstreamFullName) {
     container.appendChild(button);
 
     return container;
+}
+
+// ===============================================
+// Navigation Hotkey Handlers
+// ===============================================
+
+/**
+ * Navigate to repository owner's homepage
+ */
+/**
+ * Navigate to repo owner's homepage (smart detection for repos, users, orgs)
+ * - Repo page: Navigate to repo owner
+ * - User/org profile: Navigate to same profile
+ * - Org pages: Navigate to org homepage
+ * - Other pages: Try to extract owner from URL path
+ */
+function handleOwnerHomepage() {
+    const pathname = location.pathname;
+
+    // Check if we're on an org page (orgs/owner/...)
+    const orgMatch = pathname.match(/^\/orgs\/([^\/]+)/);
+    if (orgMatch) {
+        const owner = orgMatch[1];
+        window.location.href = `https://github.com/${owner}`;
+        return;
+    }
+
+    // Check if we're on a repo page (owner/repo)
+    const repoMatch = pathname.match(/^\/(\w[\w-]*)\/([\\w-]+)/);
+    if (repoMatch) {
+        const owner = repoMatch[1];
+        // Exclude special pages
+        const excludedOwners = ['new', 'settings', 'organizations', 'enterprises', 'team', 'orgs',
+                               'marketplace', 'explore', 'topics', 'trending', 'collections', 'events',
+                               'codespaces', 'features', 'sponsors', 'about', 'customer-stories'];
+        if (!excludedOwners.includes(owner.toLowerCase())) {
+            window.location.href = `https://github.com/${owner}`;
+            return;
+        }
+    }
+
+    // Check if we're on a user/org profile page
+    const profileMatch = pathname.match(/^\/(\w[\w-]*)(?:\/.*)?$/);
+    if (profileMatch) {
+        const owner = profileMatch[1];
+        const excludedOwners = ['new', 'settings', 'organizations', 'enterprises', 'team', 'orgs',
+                               'marketplace', 'explore', 'topics', 'trending', 'collections', 'events',
+                               'codespaces', 'features', 'sponsors', 'about', 'customer-stories', 'dashboard'];
+        if (!excludedOwners.includes(owner.toLowerCase())) {
+            window.location.href = `https://github.com/${owner}`;
+            return;
+        }
+    }
+
+    // Fallback: Go to current user's profile
+    const parsedUrl = parseGitHubUrl(location.href);
+    if (parsedUrl) {
+        window.location.href = `https://github.com/${parsedUrl.owner}`;
+    }
+}
+
+/**
+ * Navigate to current user's dashboard OR organization dashboard if on org page
+ * - If on org page/repo: Go to org dashboard
+ * - Otherwise: Go to user's personal dashboard
+ */
+async function handleDashboard() {
+    const pathname = location.pathname;
+    let owner = null;
+
+    // Check if we're on an org dashboard already
+    const orgDashMatch = pathname.match(/^\/orgs\/([^\/]+)/);
+    if (orgDashMatch) {
+        owner = orgDashMatch[1];
+        window.location.href = `https://github.com/orgs/${owner}/dashboard`;
+        return;
+    }
+
+    // Check if we're on a repo page (owner/repo)
+    const repoMatch = pathname.match(/^\/([^\/]+)\/([^\/]+)/);
+    if (repoMatch) {
+        owner = repoMatch[1];
+    } else {
+        // Check if we're on a profile page
+        const profileMatch = pathname.match(/^\/([^\/]+)(?:\/.*)?$/);
+        if (profileMatch) {
+            owner = profileMatch[1];
+        }
+    }
+
+    // List of excluded special pages
+    const excludedOwners = ['new', 'settings', 'organizations', 'enterprises', 'team', 'orgs',
+                           'marketplace', 'explore', 'topics', 'trending', 'collections', 'events',
+                           'codespaces', 'features', 'sponsors', 'about', 'customer-stories', 'dashboard'];
+    
+    if (owner && !excludedOwners.includes(owner.toLowerCase())) {
+        console.log('GitHub Assistant: Checking dashboard for owner:', owner);
+
+        // Ensure token is loaded
+        if (cachedGithubToken === null) {
+            await loadGithubTokenCache();
+        }
+
+        // Check if owner is an organization using the API
+        if (cachedGithubToken) {
+            try {
+                const response = await fetch(`https://api.github.com/users/${owner}`, {
+                    headers: { 'Authorization': `token ${cachedGithubToken}` },
+                });
+                if (response.ok) {
+                    const userData = await response.json();
+                    console.log('GitHub Assistant: Owner type for dashboard:', userData.type);
+                    if (userData.type === 'Organization') {
+                        // Navigate to org dashboard
+                        window.location.href = `https://github.com/orgs/${owner}/dashboard`;
+                        return;
+                    }
+                }
+            } catch (err) {
+                console.log('GitHub Assistant: Failed to check if owner is org for dashboard:', err);
+            }
+        }
+    }
+
+    // Default: Navigate to user's personal dashboard
+    console.log('GitHub Assistant: Navigating to personal dashboard');
+    window.location.href = 'https://github.com/dashboard';
+}
+
+/**
+ * Navigate to repository owner's feed/dashboard page (smart detection for org/user)
+ * - Detects if owner is an organization and navigates to org dashboard
+ * - For users, navigates to repositories tab
+ * - From homepage/dashboard, goes to activity feed
+ */
+async function handleOwnerFeed() {
+    const pathname = location.pathname;
+    let owner = null;
+
+    // Special case: on dashboard or homepage, go to activity feed
+    if (pathname === '/dashboard' || pathname === '/' || pathname === '') {
+        console.log('GitHub Assistant: Navigating to activity feed');
+        window.location.href = 'https://github.com/feed';
+        return;
+    }
+
+    // Check if we're on an org page (orgs/owner/...)
+    const orgMatch = pathname.match(/^\/orgs\/([^\/]+)/);
+    if (orgMatch) {
+        owner = orgMatch[1];
+        // Already know it's an org, navigate directly
+        window.location.href = `https://github.com/orgs/${owner}/dashboard`;
+        return;
+    }
+
+    // Check if we're on a repo page (owner/repo)
+    const repoMatch = pathname.match(/^\/([^\/]+)\/([^\/]+)/);
+    if (repoMatch) {
+        owner = repoMatch[1];
+    } else {
+        // Check if we're on a profile page
+        const profileMatch = pathname.match(/^\/([^\/]+)(?:\/.*)?$/);
+        if (profileMatch) {
+            owner = profileMatch[1];
+        }
+    }
+
+    // List of excluded special pages
+    const excludedOwners = ['new', 'settings', 'organizations', 'enterprises', 'team', 'orgs',
+                           'marketplace', 'explore', 'topics', 'trending', 'collections', 'events',
+                           'codespaces', 'features', 'sponsors', 'about', 'customer-stories', 'dashboard'];
+    
+    if (!owner || excludedOwners.includes(owner.toLowerCase())) {
+        // Fallback: Try to extract owner from URL
+        const parsedUrl = parseGitHubUrl(location.href);
+        if (parsedUrl) {
+            owner = parsedUrl.owner;
+        } else {
+            console.log('GitHub Assistant: Could not extract owner from URL');
+            return;
+        }
+    }
+
+    console.log('GitHub Assistant: Checking owner type for:', owner);
+
+    // Ensure token is loaded
+    if (cachedGithubToken === null) {
+        await loadGithubTokenCache();
+    }
+
+    // Check if owner is an organization using the API
+    if (cachedGithubToken) {
+        try {
+            const response = await fetch(`https://api.github.com/users/${owner}`, {
+                headers: { 'Authorization': `token ${cachedGithubToken}` },
+            });
+            if (response.ok) {
+                const userData = await response.json();
+                console.log('GitHub Assistant: Owner type:', userData.type);
+                if (userData.type === 'Organization') {
+                    // Navigate to org dashboard
+                    console.log('GitHub Assistant: Navigating to org dashboard');
+                    window.location.href = `https://github.com/orgs/${owner}/dashboard`;
+                    return;
+                }
+            } else {
+                console.log('GitHub Assistant: API response not OK:', response.status);
+            }
+        } catch (err) {
+            console.log('GitHub Assistant: Failed to check if owner is org:', err);
+        }
+    } else {
+        console.log('GitHub Assistant: No GitHub token found');
+    }
+
+    // Default: Navigate to repositories tab (for users or if API call fails)
+    console.log('GitHub Assistant: Navigating to repositories tab');
+    window.location.href = `https://github.com/${owner}?tab=repositories`;
+}
+
+/**
+ * Navigate to a custom URL
+ */
+function handleCustomNavigation(url) {
+    if (!url) return;
+    window.location.href = url;
+}
+
+/**
+ * Navigate to packages page of current owner (organization or user)
+ * - Detects if owner is an organization and uses correct URL format
+ * - Organizations: /orgs/{owner}/packages
+ * - Users: /{owner}?tab=packages
+ */
+async function handlePackages() {
+    const pathname = location.pathname;
+    let owner = null;
+
+    // Check if we're on an org page (orgs/owner/...)
+    const orgMatch = pathname.match(/^\/orgs\/([^\/]+)/);
+    if (orgMatch) {
+        owner = orgMatch[1];
+        // Already know it's an org, navigate directly
+        window.location.href = `https://github.com/orgs/${owner}/packages`;
+        return;
+    }
+
+    // Check if we're on a repo page (owner/repo)
+    const repoMatch = pathname.match(/^\/([^\/]+)\/([^\/]+)/);
+    if (repoMatch) {
+        owner = repoMatch[1];
+    } else {
+        // Check if we're on a profile page
+        const profileMatch = pathname.match(/^\/([^\/]+)(?:\/.*)?$/);
+        if (profileMatch) {
+            owner = profileMatch[1];
+        }
+    }
+
+    // List of excluded special pages
+    const excludedOwners = ['new', 'settings', 'organizations', 'enterprises', 'team', 'orgs',
+                           'marketplace', 'explore', 'topics', 'trending', 'collections', 'events',
+                           'codespaces', 'features', 'sponsors', 'about', 'customer-stories', 'dashboard'];
+    
+    if (!owner || excludedOwners.includes(owner.toLowerCase())) {
+        // Fallback: Try to extract owner from URL
+        const parsedUrl = parseGitHubUrl(location.href);
+        if (parsedUrl) {
+            owner = parsedUrl.owner;
+        } else {
+            console.log('GitHub Assistant: Could not extract owner for packages navigation');
+            return;
+        }
+    }
+
+    console.log('GitHub Assistant: Navigating to packages for:', owner);
+
+    // Ensure token is loaded
+    if (cachedGithubToken === null) {
+        await loadGithubTokenCache();
+    }
+
+    // Check if owner is an organization using the API
+    if (cachedGithubToken) {
+        try {
+            const response = await fetch(`https://api.github.com/users/${owner}`, {
+                headers: { 'Authorization': `token ${cachedGithubToken}` },
+            });
+            if (response.ok) {
+                const userData = await response.json();
+                console.log('GitHub Assistant: Owner type for packages:', userData.type);
+                if (userData.type === 'Organization') {
+                    // Navigate to org packages
+                    window.location.href = `https://github.com/orgs/${owner}/packages`;
+                    return;
+                }
+            } else {
+                console.log('GitHub Assistant: API response not OK:', response.status);
+            }
+        } catch (err) {
+            console.log('GitHub Assistant: Failed to check if owner is org for packages:', err);
+        }
+    } else {
+        console.log('GitHub Assistant: No GitHub token found for packages navigation');
+    }
+
+    // Default: Navigate to packages tab (for users or if API call fails)
+    window.location.href = `https://github.com/${owner}?tab=packages`;
+}
+
+/**
+ * Navigate to gists page of current logged-in user
+ * - Gets current user from API
+ * - Navigates to their gists page
+ */
+async function handleGists() {
+    // Try to get current user from API
+    if (cachedGithubToken) {
+        try {
+            const response = await fetch('https://api.github.com/user', {
+                headers: { 'Authorization': `token ${cachedGithubToken}` },
+            });
+            if (response.ok) {
+                const userData = await response.json();
+                window.location.href = `https://gist.github.com/${userData.login}`;
+                return;
+            }
+        } catch (err) {
+            console.log('GitHub Assistant: Failed to fetch current user for gists navigation');
+        }
+    }
+
+    // Fallback: Navigate to gists homepage
+    window.location.href = 'https://gist.github.com/';
+}
+
+/**
+ * Navigate to GitHub Copilot page
+ */
+function handleGithubCopilot() {
+    window.location.href = 'https://github.com/copilot';
+}
+
+// ===============================================
+// Hotkey Navigation for Issues/PRs and Releases
+// ===============================================
+
+/**
+ * Initialize hotkey listeners for navigating issues/PRs and releases
+ * j/k: Navigate to previous/next issue/PR
+ * gr: Navigate to releases page
+ */
+
+async function initHotkeys() {
+    // Prevent multiple initializations
+    if (hotkeysInitialized) {
+        return;
+    }
+
+    // Load settings if not loaded
+    if (cachedSettings === null) {
+        await loadSettingsCache();
+    }
+
+    // Check if hotkeys feature is enabled (defaulting to true)
+    if (cachedSettings.enableHotkeys === false) {
+        return;
+    }
+
+    let comboState = {
+        keys: [],
+        timeout: null,
+    };
+
+    document.addEventListener("keydown", async (event) => {
+        // Don't trigger if user is typing in an input/textarea/contenteditable
+        if (
+            event.target.matches(
+                "input, textarea, [contenteditable], button, select",
+            )
+        ) {
+            return;
+        }
+
+        const key = event.key.toLowerCase();
+        clearTimeout(comboState.timeout);
+
+        // Add key to combo state
+        comboState.keys.push(key);
+
+        // Check for navigation hotkey combos
+        let navHotkeys = cachedSettings.navHotkeys || DEFAULT_SETTINGS.navHotkeys;
+
+        // Validate navHotkeys array exists and has items
+        if (!navHotkeys || !Array.isArray(navHotkeys) || navHotkeys.length === 0) {
+            console.log('GitHub Assistant: navHotkeys is not properly initialized');
+            navHotkeys = DEFAULT_SETTINGS.navHotkeys;
+        }
+
+        for (const hotkey of navHotkeys) {
+            // Skip invalid hotkey entries
+            if (!hotkey || !hotkey.keys || !Array.isArray(hotkey.keys)) {
+                continue;
+            }
+
+            if (
+                hotkey.keys.length === comboState.keys.length &&
+                hotkey.keys.every((k, i) => k === comboState.keys[i])
+            ) {
+                event.preventDefault();
+                event.stopPropagation();
+                await handleHotkeyNavigation(hotkey);
+                comboState.keys = [];
+                clearTimeout(comboState.timeout);
+                return;
+            }
+        }
+
+        // Check for prefix match - keep waiting for more keys
+        const hasPrefix = navHotkeys.some((hotkey) => {
+            // Skip invalid hotkeys
+            if (!hotkey || !hotkey.keys || !Array.isArray(hotkey.keys)) {
+                return false;
+            }
+            return (
+                hotkey.keys.length > comboState.keys.length &&
+                hotkey.keys.slice(0, comboState.keys.length).every((k, i) => k === comboState.keys[i])
+            );
+        });
+
+        if (hasPrefix) {
+            event.preventDefault();
+            event.stopPropagation();
+            // Set timeout to reset if no more keys come
+            comboState.timeout = setTimeout(() => {
+                comboState.keys = [];
+            }, 1000);
+            return;
+        }
+
+        // No match and no prefix - reset combo and handle single keys
+        comboState.keys = [];
+        clearTimeout(comboState.timeout);
+
+        // Handle j/k for navigating issues/PRs
+        if (key === "j") {
+            event.preventDefault();
+            handlePreviousIssue();
+        } else if (key === "k") {
+            event.preventDefault();
+            handleNextIssue();
+        }
+    });
+
+    hotkeysInitialized = true;
+    console.log("GitHub Assistant: Hotkey listeners initialized");
+}
+/**
+ * Handle navigation based on hotkey configuration
+ */
+async function handleHotkeyNavigation(hotkey) {
+    // Guard against undefined or invalid hotkey
+    if (!hotkey || typeof hotkey !== 'object') {
+        console.log('GitHub Assistant: Invalid hotkey object', hotkey);
+        return;
+    }
+
+    if (hotkey.urlType === 'static' && hotkey.url) {
+        handleCustomNavigation(hotkey.url);
+    } else if (hotkey.urlType === 'owner-home') {
+        handleOwnerHomepage();
+    } else if (hotkey.urlType === 'owner-feed') {
+        await handleOwnerFeed();
+    } else if (hotkey.urlType === 'dashboard') {
+        await handleDashboard();
+    } else if (hotkey.urlType === 'packages') {
+        await handlePackages();
+    } else if (hotkey.urlType === 'gists') {
+        await handleGists();
+    }
+}
+
+/**
+ * Initialize hotkey listeners for navigating issues/PRs and releases
+ * j/k: Navigate to previous/next issue/PR
+ * gr: Navigate to releases page
+ */
+
+/**
+ * Navigate to the previous (older) issue/PR
+ * Shows a notification if on the first issue/PR
+ */
+function handlePreviousIssue() {
+    const parsedUrl = parseGitHubUrl(location.href);
+    if (!parsedUrl) return;
+
+    // Check if we're on an issue or PR page
+    const issueMatch = location.pathname.match(/\/issues\/(\d+)/);
+    const prMatch = location.pathname.match(/\/pull\/(\d+)/);
+
+    if (!issueMatch && !prMatch) {
+        return;
+    }
+
+    const currentNumber = parseInt(issueMatch ? issueMatch[1] : prMatch[1]);
+    if (currentNumber <= 1) {
+        showNavigationNotification("You are at the first issue/PR");
+        return;
+    }
+
+    const type = issueMatch ? "issues" : "pull";
+    const { owner, repo } = parsedUrl;
+    const newUrl = `https://github.com/${owner}/${repo}/${type}/${
+        currentNumber - 1
+    }`;
+    window.location.href = newUrl;
+}
+
+/**
+ * Navigate to the next (newer) issue/PR
+ */
+function handleNextIssue() {
+    const parsedUrl = parseGitHubUrl(location.href);
+    if (!parsedUrl) return;
+
+    // Check if we're on an issue or PR page
+    const issueMatch = location.pathname.match(/\/issues\/(\d+)/);
+    const prMatch = location.pathname.match(/\/pull\/(\d+)/);
+
+    if (!issueMatch && !prMatch) {
+        return;
+    }
+
+    const currentNumber = parseInt(issueMatch ? issueMatch[1] : prMatch[1]);
+    const type = issueMatch ? "issues" : "pull";
+    const { owner, repo } = parsedUrl;
+    const newUrl = `https://github.com/${owner}/${repo}/${type}/${
+        currentNumber + 1
+    }`;
+    window.location.href = newUrl;
+}
+
+/**
+ * Navigate to releases page of current repository
+ * No notification shown per requirement
+ */
+function handleGotoReleases() {
+    const parsedUrl = parseGitHubUrl(location.href);
+    if (!parsedUrl) return;
+
+    const { owner, repo } = parsedUrl;
+    const releasesUrl = `https://github.com/${owner}/${repo}/releases`;
+    window.location.href = releasesUrl;
+}
+
+/**
+ * Show a temporary notification for navigation feedback
+ */
+function showNavigationNotification(message) {
+    // Remove existing notification if present
+    const existing = document.getElementById("gh-assistant-nav-notification");
+    if (existing) {
+        existing.remove();
+    }
+
+    const notification = document.createElement("div");
+    notification.id = "gh-assistant-nav-notification";
+    notification.style.cssText = `
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        background: #f6f8fa;
+        border: 1px solid #d0d7de;
+        border-radius: 6px;
+        padding: 12px 16px;
+        font-size: 14px;
+        font-weight: 500;
+        color: #24292f;
+        box-shadow: 0 8px 24px rgba(140, 149, 159, 0.2);
+        z-index: 10000;
+        animation: slideIn 0.2s ease-out;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    `;
+
+    // Add animation
+    const style = document.createElement("style");
+    style.textContent = `
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+    `;
+    if (!document.querySelector("style[data-gh-assistant-animation]")) {
+        style.setAttribute("data-gh-assistant-animation", "true");
+        document.head.appendChild(style);
+    }
+
+    notification.textContent = message;
+    document.body.appendChild(notification);
+
+    // Auto-remove after 2.5 seconds
+    setTimeout(() => {
+        notification.style.opacity = "0";
+        notification.style.transition = "opacity 0.2s ease-out";
+        setTimeout(() => {
+            notification.remove();
+        }, 200);
+    }, 2500);
 }
 
 // ===============================================

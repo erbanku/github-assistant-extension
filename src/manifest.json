@@ -1,18 +1,22 @@
 {
     "manifest_version": 3,
     "name": "GitHub Assistant",
-    "version": "1.8.1",
+    "version": "1.9.0",
     "description": "Navigate between forks and upstream repos, import repositories, and quickly access/copy raw files from GitHub and Gists",
     "permissions": [ "storage" ],
     "host_permissions": [
         "https://api.github.com/*",
         "https://github.com/*",
+        "https://gist.github.com/*",
         "https://raw.githubusercontent.com/*",
         "https://gist.githubusercontent.com/*"
     ],
     "content_scripts": [
         {
-            "matches": [ "https://github.com/*" ],
+            "matches": [ 
+                "https://github.com/*",
+                "https://gist.github.com/*"
+            ],
             "js": [ "content.js" ],
             "run_at": "document_idle"
         },

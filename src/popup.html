@@ -425,6 +425,70 @@
         .json-error.show {
             display: block;
         }
+
+        .hotkey-item {
+            padding: 12px;
+            border-bottom: 1px solid #d0d7de;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .hotkey-item:last-child {
+            border-bottom: none;
+        }
+
+        .hotkey-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .hotkey-name {
+            font-weight: 500;
+            color: #24292f;
+            font-size: 13px;
+        }
+
+        .hotkey-display {
+            font-size: 12px;
+            color: #57606a;
+            font-family: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
+            margin-top: 4px;
+        }
+
+        .hotkey-edit {
+            display: flex;
+            gap: 8px;
+            flex-direction: column;
+        }
+
+        .hotkey-key-input,
+        .hotkey-url-input {
+            padding: 6px 8px;
+            border: 1px solid #d0d7de;
+            border-radius: 4px;
+            font-size: 12px;
+            font-family: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
+        }
+
+        .hotkey-key-input {
+            width: 60px;
+        }
+
+        .hotkey-url-input {
+            width: 150px;
+        }
+
+        .hotkey-buttons {
+            display: flex;
+            gap: 6px;
+        }
+
+        .hotkey-buttons button {
+            padding: 4px 8px;
+            font-size: 11px;
+            white-space: nowrap;
+        }
     </style>
 </head>
 
@@ -531,6 +595,10 @@
                 <input type="checkbox" id="setup-setting-raw-page" checked>
                 <label for="setup-setting-raw-page">Show Raw Page buttons</label>
             </div>
+            <div class="checkbox-group">
+                <input type="checkbox" id="setup-setting-hotkeys" checked>
+                <label for="setup-setting-hotkeys">Enable Hotkeys (j/k, gr, gv/gh/gd/gf/gc)</label>
+            </div>
         </div>
 
         <div class="popup-content">
@@ -611,6 +679,27 @@
             <div class="checkbox-group">
                 <input type="checkbox" id="setting-raw-page" checked>
                 <label for="setting-raw-page">Show Raw Page buttons</label>
+            </div>
+            <div class="checkbox-group">
+                <input type="checkbox" id="setting-hotkeys" checked>
+                <label for="setting-hotkeys">Enable Hotkeys (j/k, gr, gv/gh/gd/gf/gc)</label>
+            </div>
+        </div>
+
+        <div class="setup-section">
+            <label>Custom Navigation Hotkeys</label>
+            <div class="help-text" style="margin-bottom: 12px;">
+                Customize hotkey combos and URLs for quick navigation
+            </div>
+            <button id="edit-hotkeys-btn" class="btn btn-secondary btn-block">Edit Hotkeys</button>
+            <div id="hotkeys-editor" style="display: none; margin-top: 12px;">
+                <div id="hotkeys-list"
+                    style="max-height: 300px; overflow-y: auto; border: 1px solid #d0d7de; border-radius: 6px; margin-bottom: 12px;">
+                    <!-- Dynamically populated -->
+                </div>
+                <button id="save-hotkeys-btn" class="btn btn-block">Save Hotkeys</button>
+                <button id="cancel-hotkeys-btn" class="btn btn-secondary btn-block"
+                    style="margin-top: 8px;">Cancel</button>
             </div>
         </div>
     </div>

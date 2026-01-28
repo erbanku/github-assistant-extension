@@ -10,11 +10,29 @@ https://chromewebstore.google.com/detail/github-go-to-fork/gmafgjjojobkaegbpnmkj
 -   **GitHub Assistant**: One-click navigation to your forked repository when viewing the upstream
 -   **Import Repository**: Redirects to GitHub's import page with pre-filled repository details (URL, name, description)
 -   **Back to Upstream**: Easy navigation from your fork back to the original repository
+-   **Quick Access Links**: Customizable buttons for frequently visited GitHub destinations
+-   **Raw Page Enhancement**: Navigation and copy buttons on raw.githubusercontent.com pages
+-   **Keyboard Shortcuts**: Navigate GitHub quickly with hotkeys (see below)
 -   **Smart Naming**: Automatically handles name conflicts by appending numbers (repo-1, repo-2, etc.)
 -   **Multi-account Support**: Checks all your organizations and personal accounts
 -   **Dropdown Menu**: When multiple forks exist, shows all options in a dropdown
 -   **Seamless Integration**: Buttons integrate naturally with GitHub's UI
--   **Import with Attribution**: Automatically adds "Imported Repo, Original: [url]" to description
+
+## Keyboard Shortcuts
+
+Navigate GitHub faster with these hotkeys (works on github.com and gist.github.com):
+
+| Hotkey | Action |
+|--------|--------|
+| `g` `v` / `g` `h` | Go to repo owner's homepage |
+| `g` `d` | Go to dashboard (personal or org context-aware) |
+| `g` `f` | Go to feed/repositories (context-aware for orgs/users) |
+| `g` `t` | Go to packages page |
+| `g` `g` | Go to your gists |
+| `g` `c` | Go to GitHub Copilot |
+| `g` `l` | Go to Linear.app |
+| `j` | Navigate to previous issue/PR |
+| `k` | Navigate to next issue/PR |
 
 ## Installation
 
