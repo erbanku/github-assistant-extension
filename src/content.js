@@ -161,19 +161,21 @@ async function injectQuickAccessButtons() {
         return;
     }
 
-    // Find the search button group in the top navigation
-    const searchButtonGroup =
-        document.querySelector(".Search-module__searchButtonGroup--L3A4O") ||
-        document.querySelector('[data-testid="top-nav-center"]');
+    // Find the top-nav-center section for button placement
+    const topNavCenter = document.querySelector('[data-testid="top-nav-center"]');
 
-    if (!searchButtonGroup) {
+    if (!topNavCenter) {
         console.log(
-            "GitHub Assistant: Could not find search button group for quick access buttons",
+            "GitHub Assistant: Could not find top-nav-center for quick access buttons",
         );
         return;
     }
 
-    // Create container for quick access buttons
+    // Find the search button group to insert before it
+    const searchButtonGroup = topNavCenter.querySelector(".Search-module__searchButtonGroup--L3A4O") ||
+                             topNavCenter.querySelector('[class*="Search"]');
+
+    // Create container for quick access buttons - single row
     const container = document.createElement("div");
     container.id = "github-assistant-quick-access-container";
     container.style.cssText = `
@@ -252,8 +254,12 @@ async function injectQuickAccessButtons() {
         container.appendChild(button);
     });
 
-    // Insert before the search button group
-    searchButtonGroup.parentNode.insertBefore(container, searchButtonGroup);
+    // Insert buttons before search
+    if (searchButtonGroup) {
+        topNavCenter.insertBefore(container, searchButtonGroup);
+    } else {
+        topNavCenter.insertBefore(container, topNavCenter.firstChild);
+    }
 
     console.log(
         `GitHub Assistant: Injected ${activeLinks.length} quick access button(s)`,
@@ -1242,26 +1248,28 @@ function addForkButton(forks) {
     // Prevent duplicate buttons
     if (document.getElementById("go-to-fork-container")) return;
 
-    // Find the search button group in the top navigation
-    const searchButtonGroup =
-        document.querySelector(".Search-module__searchButtonGroup--L3A4O") ||
-        document.querySelector('[data-testid="top-nav-center"]');
+    // Find the top-nav-center section for button placement
+    const topNavCenter = document.querySelector('[data-testid="top-nav-center"]');
 
-    if (!searchButtonGroup) {
+    if (!topNavCenter) {
         console.log(
-            "GitHub Assistant: Could not find search button group for fork button",
+            "GitHub Assistant: Could not find top-nav-center for fork button",
         );
         return;
     }
 
+    // Find the search button group to insert before it
+    const searchButtonGroup = topNavCenter.querySelector(".Search-module__searchButtonGroup--L3A4O") ||
+                             topNavCenter.querySelector('[class*="Search"]');
+
     const container = createForkButtonContainer(forks);
 
-    // Add with some margin to separate from search box
-    container.style.marginRight = "8px";
-    container.style.display = "inline-block";
-
-    // Insert before the search button group
-    searchButtonGroup.parentNode.insertBefore(container, searchButtonGroup);
+    // Insert before search
+    if (searchButtonGroup) {
+        topNavCenter.insertBefore(container, searchButtonGroup);
+    } else {
+        topNavCenter.insertBefore(container, topNavCenter.firstChild);
+    }
     console.log("GitHub Assistant: Fork button added successfully");
 }
 
@@ -1456,28 +1464,31 @@ function addUpstreamButton(upstreamUrl, upstreamFullName) {
     // Prevent duplicate buttons
     if (document.getElementById("back-to-upstream-container")) return;
 
-    // Find the search button group in the top navigation
-    const searchButtonGroup =
-        document.querySelector(".Search-module__searchButtonGroup--L3A4O") ||
-        document.querySelector('[data-testid="top-nav-center"]');
+    // Find the top-nav-center section for button placement
+    const topNavCenter = document.querySelector('[data-testid="top-nav-center"]');
 
-    if (!searchButtonGroup) {
+    if (!topNavCenter) {
         console.log(
-            "GitHub Assistant: Could not find search button group for upstream button",
+            "GitHub Assistant: Could not find top-nav-center for upstream button",
         );
         return;
     }
+
+    // Find the search button group to insert before it
+    const searchButtonGroup = topNavCenter.querySelector(".Search-module__searchButtonGroup--L3A4O") ||
+                             topNavCenter.querySelector('[class*="Search"]');
 
     const container = createUpstreamButtonContainer(
         upstreamUrl,
         upstreamFullName,
     );
 
-    container.style.marginRight = "8px";
-    container.style.display = "inline-block";
-
-    // Insert before the search button group
-    searchButtonGroup.parentNode.insertBefore(container, searchButtonGroup);
+    // Insert before search
+    if (searchButtonGroup) {
+        topNavCenter.insertBefore(container, searchButtonGroup);
+    } else {
+        topNavCenter.insertBefore(container, topNavCenter.firstChild);
+    }
     console.log("GitHub Assistant: Upstream button added successfully");
 }
 
@@ -1623,7 +1634,7 @@ async function handleDashboard() {
     const excludedOwners = ['new', 'settings', 'organizations', 'enterprises', 'team', 'orgs',
                            'marketplace', 'explore', 'topics', 'trending', 'collections', 'events',
                            'codespaces', 'features', 'sponsors', 'about', 'customer-stories', 'dashboard'];
-    
+
     if (owner && !excludedOwners.includes(owner.toLowerCase())) {
         console.log('GitHub Assistant: Checking dashboard for owner:', owner);
 
@@ -1700,7 +1711,7 @@ async function handleOwnerFeed() {
     const excludedOwners = ['new', 'settings', 'organizations', 'enterprises', 'team', 'orgs',
                            'marketplace', 'explore', 'topics', 'trending', 'collections', 'events',
                            'codespaces', 'features', 'sponsors', 'about', 'customer-stories', 'dashboard'];
-    
+
     if (!owner || excludedOwners.includes(owner.toLowerCase())) {
         // Fallback: Try to extract owner from URL
         const parsedUrl = parseGitHubUrl(location.href);
@@ -1792,7 +1803,7 @@ async function handlePackages() {
     const excludedOwners = ['new', 'settings', 'organizations', 'enterprises', 'team', 'orgs',
                            'marketplace', 'explore', 'topics', 'trending', 'collections', 'events',
                            'codespaces', 'features', 'sponsors', 'about', 'customer-stories', 'dashboard'];
-    
+
     if (!owner || excludedOwners.includes(owner.toLowerCase())) {
         // Fallback: Try to extract owner from URL
         const parsedUrl = parseGitHubUrl(location.href);
