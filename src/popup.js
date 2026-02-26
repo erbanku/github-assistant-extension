@@ -215,7 +215,13 @@ saveJsonBtn.addEventListener("click", () => {
                 extraStorage.extensionSettings = allSettingsData.extensionSettings;
             }
         }
-        persistQuickLinksAndSyncUI(limitedData, true, extraStorage);
+        const includesFullSettings = !!allSettingsData;
+        persistQuickLinksAndSyncUI(
+            limitedData,
+            true,
+            extraStorage,
+            includesFullSettings
+        );
     } catch (e) {
         jsonError.textContent = `Invalid JSON: ${e.message}`;
         jsonError.classList.add("show");
@@ -533,7 +539,8 @@ function normalizeQuickLinksFromJson(data) {
 function persistQuickLinksAndSyncUI(
     links,
     showButtonFeedback = false,
-    extraStorage = {}
+    extraStorage = {},
+    showAllSettingsInEditor = false
 ) {
     chrome.storage.sync.set({ quickAccessLinks: links, ...extraStorage }, () => {
         if (chrome.runtime.lastError) {
@@ -548,7 +555,19 @@ function persistQuickLinksAndSyncUI(
             const persisted = stored.quickAccessLinks || [];
             initQuickLinks(persisted);
             displayConfiguredLinks(persisted);
-            jsonEditor.value = JSON.stringify(persisted, null, 2);
+            if (showAllSettingsInEditor) {
+                jsonEditor.value = JSON.stringify(
+                    {
+                        githubToken: stored.githubToken || "",
+                        quickAccessLinks: persisted,
+                        extensionSettings: stored.extensionSettings || {},
+                    },
+                    null,
+                    2
+                );
+            } else {
+                jsonEditor.value = JSON.stringify(persisted, null, 2);
+            }
             updateJsonLineNumbers();
             if (typeof stored.githubToken === "string") {
                 savedToken = stored.githubToken;
