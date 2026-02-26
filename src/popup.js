@@ -187,11 +187,7 @@ jsonEditor.addEventListener("blur", () => {
             if (item.url && !isValidGitHubUrl(item.url)) return;
         }
         const normalized = normalizeQuickLinksFromJson(data);
-        chrome.storage.sync.set({ quickAccessLinks: normalized }, () => {
-            if (chrome.runtime.lastError) return;
-            initQuickLinks(normalized);
-            displayConfiguredLinks(normalized);
-        });
+        persistQuickLinksAndSyncUI(normalized);
         jsonError.classList.remove("show");
     } catch (e) {
         // Invalid JSON - don't save
@@ -209,26 +205,7 @@ saveJsonBtn.addEventListener("click", () => {
             }
         }
         const limitedData = normalizeQuickLinksFromJson(data);
-        chrome.storage.sync.set({ quickAccessLinks: limitedData }, () => {
-            if (chrome.runtime.lastError) {
-                jsonError.textContent = `Save failed: ${chrome.runtime.lastError.message}`;
-                jsonError.classList.add("show");
-                return;
-            }
-            jsonError.classList.remove("show");
-            // Sync to form view
-            initQuickLinks(limitedData);
-            // Sync to configured links if in configured view
-            displayConfiguredLinks(limitedData);
-            // Visual feedback
-            const orig = saveJsonBtn.textContent;
-            saveJsonBtn.textContent = "Saved!";
-            saveJsonBtn.disabled = true;
-            setTimeout(() => {
-                saveJsonBtn.textContent = orig;
-                saveJsonBtn.disabled = false;
-            }, 1500);
-        });
+        persistQuickLinksAndSyncUI(limitedData, true);
     } catch (e) {
         jsonError.textContent = `Invalid JSON: ${e.message}`;
         jsonError.classList.add("show");
@@ -484,6 +461,34 @@ function normalizeQuickLinksFromJson(data) {
         url: (item && item.url ? String(item.url) : "").trim(),
         color: item && item.color ? item.color : "blue",
     }));
+}
+
+function persistQuickLinksAndSyncUI(links, showButtonFeedback = false) {
+    chrome.storage.sync.set({ quickAccessLinks: links }, () => {
+        if (chrome.runtime.lastError) {
+            jsonError.textContent = `Save failed: ${chrome.runtime.lastError.message}`;
+            jsonError.classList.add("show");
+            return;
+        }
+
+        chrome.storage.sync.get(["quickAccessLinks"], (stored) => {
+            const persisted = stored.quickAccessLinks || [];
+            initQuickLinks(persisted);
+            displayConfiguredLinks(persisted);
+            jsonEditor.value = JSON.stringify(persisted, null, 2);
+            updateJsonLineNumbers();
+            jsonError.classList.remove("show");
+
+            if (!showButtonFeedback) return;
+            const orig = saveJsonBtn.textContent;
+            saveJsonBtn.textContent = "Saved!";
+            saveJsonBtn.disabled = true;
+            setTimeout(() => {
+                saveJsonBtn.textContent = orig;
+                saveJsonBtn.disabled = false;
+            }, 1500);
+        });
+    });
 }
 
 // Collect quick links from inputs
