@@ -156,7 +156,7 @@ formViewBtn.addEventListener("click", () => {
     try {
         const jsonData = JSON.parse(jsonEditor.value || "[]");
         if (!Array.isArray(jsonData)) throw new Error("JSON must be an array");
-        const limitedData = jsonData.slice(0, 5);
+        const limitedData = normalizeQuickLinksFromJson(jsonData);
         chrome.storage.sync.set({ quickAccessLinks: limitedData });
         initQuickLinks(limitedData);
     } catch (e) {
@@ -186,7 +186,12 @@ jsonEditor.addEventListener("blur", () => {
         for (const item of data) {
             if (item.url && !isValidGitHubUrl(item.url)) return;
         }
-        chrome.storage.sync.set({ quickAccessLinks: data.slice(0, 5) });
+        const normalized = normalizeQuickLinksFromJson(data);
+        chrome.storage.sync.set({ quickAccessLinks: normalized }, () => {
+            if (chrome.runtime.lastError) return;
+            initQuickLinks(normalized);
+            displayConfiguredLinks(normalized);
+        });
         jsonError.classList.remove("show");
     } catch (e) {
         // Invalid JSON - don't save
@@ -203,8 +208,13 @@ saveJsonBtn.addEventListener("click", () => {
                 throw new Error(`Invalid GitHub URL: ${item.url}`);
             }
         }
-        const limitedData = data.slice(0, 5);
+        const limitedData = normalizeQuickLinksFromJson(data);
         chrome.storage.sync.set({ quickAccessLinks: limitedData }, () => {
+            if (chrome.runtime.lastError) {
+                jsonError.textContent = `Save failed: ${chrome.runtime.lastError.message}`;
+                jsonError.classList.add("show");
+                return;
+            }
             jsonError.classList.remove("show");
             // Sync to form view
             initQuickLinks(limitedData);
@@ -245,10 +255,11 @@ jsonEditor.addEventListener(
             }
 
             // Limit to 5 items
-            const limitedData = data.slice(0, 5);
+            const limitedData = normalizeQuickLinksFromJson(data);
 
             // Save if valid
             chrome.storage.sync.set({ quickAccessLinks: limitedData }, () => {
+                if (chrome.runtime.lastError) return;
                 console.log("Quick links saved from JSON");
                 jsonError.classList.remove("show");
             });
@@ -464,6 +475,15 @@ function isValidGitHubUrl(url) {
     } catch {
         return false;
     }
+}
+
+function normalizeQuickLinksFromJson(data) {
+    return data.slice(0, 5).map((item, idx) => ({
+        name: (item && item.name ? String(item.name) : "").trim(),
+        link_num: `LINK ${idx + 1}`,
+        url: (item && item.url ? String(item.url) : "").trim(),
+        color: item && item.color ? item.color : "blue",
+    }));
 }
 
 // Collect quick links from inputs
