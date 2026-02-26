@@ -155,8 +155,8 @@ formViewBtn.addEventListener("click", () => {
     // Sync from JSON to form and save to storage if valid
     try {
         const jsonData = JSON.parse(jsonEditor.value || "[]");
-        if (!Array.isArray(jsonData)) throw new Error("JSON must be an array");
-        const limitedData = normalizeQuickLinksFromJson(jsonData);
+        const quickLinksData = extractQuickLinksFromJsonInput(jsonData);
+        const limitedData = normalizeQuickLinksFromJson(quickLinksData);
         chrome.storage.sync.set({ quickAccessLinks: limitedData });
         initQuickLinks(limitedData);
     } catch (e) {
@@ -182,8 +182,8 @@ jsonViewBtn.addEventListener("click", () => {
 jsonEditor.addEventListener("blur", () => {
     try {
         const data = JSON.parse(jsonEditor.value || "[]");
-        if (!Array.isArray(data)) return;
-        const normalized = normalizeQuickLinksFromJson(data);
+        const quickLinksData = extractQuickLinksFromJsonInput(data);
+        const normalized = normalizeQuickLinksFromJson(quickLinksData);
         for (const item of normalized) {
             if (item.url && !isValidGitHubUrl(item.url)) return;
         }
@@ -198,8 +198,8 @@ jsonEditor.addEventListener("blur", () => {
 saveJsonBtn.addEventListener("click", () => {
     try {
         const data = JSON.parse(jsonEditor.value || "[]");
-        if (!Array.isArray(data)) throw new Error("JSON must be an array");
-        const limitedData = normalizeQuickLinksFromJson(data);
+        const quickLinksData = extractQuickLinksFromJsonInput(data);
+        const limitedData = normalizeQuickLinksFromJson(quickLinksData);
         for (const item of limitedData) {
             if (item.url && !isValidGitHubUrl(item.url)) {
                 throw new Error(`Invalid GitHub URL: ${item.url}`);
@@ -218,21 +218,20 @@ jsonEditor.addEventListener(
     debounce(() => {
         try {
             const data = JSON.parse(jsonEditor.value || "[]");
+            const quickLinksData = extractQuickLinksFromJsonInput(data);
 
             // Validate structure
-            if (!Array.isArray(data)) {
-                throw new Error("JSON must be an array");
-            }
+            if (!Array.isArray(quickLinksData)) throw new Error("Invalid JSON format");
 
             // Validate URLs
-            for (const item of data) {
+            for (const item of quickLinksData) {
                 if (item.url && !isValidGitHubUrl(item.url)) {
                     throw new Error(`Invalid GitHub URL: ${item.url}`);
                 }
             }
 
             // Limit to 5 items
-            const limitedData = normalizeQuickLinksFromJson(data);
+            const limitedData = normalizeQuickLinksFromJson(quickLinksData);
 
             // Save if valid
             chrome.storage.sync.set({ quickAccessLinks: limitedData }, () => {
@@ -452,6 +451,26 @@ function isValidGitHubUrl(url) {
     } catch {
         return false;
     }
+}
+
+function extractQuickLinksFromJsonInput(data) {
+    if (Array.isArray(data)) {
+        if (
+            data.length === 1 &&
+            data[0] &&
+            typeof data[0] === "object" &&
+            Array.isArray(data[0].quickAccessLinks)
+        ) {
+            return data[0].quickAccessLinks;
+        }
+        return data;
+    }
+
+    if (data && typeof data === "object" && Array.isArray(data.quickAccessLinks)) {
+        return data.quickAccessLinks;
+    }
+
+    throw new Error("JSON must be quick links array or object with quickAccessLinks");
 }
 
 function normalizeQuickLinksFromJson(data) {
