@@ -198,6 +198,7 @@ jsonEditor.addEventListener("blur", () => {
 saveJsonBtn.addEventListener("click", () => {
     try {
         const data = JSON.parse(jsonEditor.value || "[]");
+        const allSettingsData = extractAllSettingsFromJsonInput(data);
         const quickLinksData = extractQuickLinksFromJsonInput(data);
         const limitedData = normalizeQuickLinksFromJson(quickLinksData);
         for (const item of limitedData) {
@@ -205,7 +206,16 @@ saveJsonBtn.addEventListener("click", () => {
                 throw new Error(`Invalid GitHub URL: ${item.url}`);
             }
         }
-        persistQuickLinksAndSyncUI(limitedData, true);
+        const extraStorage = {};
+        if (allSettingsData) {
+            if (typeof allSettingsData.githubToken === "string") {
+                extraStorage.githubToken = allSettingsData.githubToken;
+            }
+            if (allSettingsData.extensionSettings) {
+                extraStorage.extensionSettings = allSettingsData.extensionSettings;
+            }
+        }
+        persistQuickLinksAndSyncUI(limitedData, true, extraStorage);
     } catch (e) {
         jsonError.textContent = `Invalid JSON: ${e.message}`;
         jsonError.classList.add("show");
@@ -473,6 +483,30 @@ function extractQuickLinksFromJsonInput(data) {
     throw new Error("JSON must be quick links array or object with quickAccessLinks");
 }
 
+function extractAllSettingsFromJsonInput(data) {
+    let payload = data;
+    if (
+        Array.isArray(payload) &&
+        payload.length === 1 &&
+        payload[0] &&
+        typeof payload[0] === "object" &&
+        !Array.isArray(payload[0])
+    ) {
+        payload = payload[0];
+    }
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+        return null;
+    }
+    if (
+        !Object.prototype.hasOwnProperty.call(payload, "githubToken") &&
+        !Object.prototype.hasOwnProperty.call(payload, "extensionSettings") &&
+        !Object.prototype.hasOwnProperty.call(payload, "quickAccessLinks")
+    ) {
+        return null;
+    }
+    return payload;
+}
+
 function normalizeQuickLinksFromJson(data) {
     const allowedColors = new Set(["blue", "yellow", "green", "purple"]);
     return data
@@ -496,20 +530,33 @@ function normalizeQuickLinksFromJson(data) {
         .filter((item) => item.url || item.name);
 }
 
-function persistQuickLinksAndSyncUI(links, showButtonFeedback = false) {
-    chrome.storage.sync.set({ quickAccessLinks: links }, () => {
+function persistQuickLinksAndSyncUI(
+    links,
+    showButtonFeedback = false,
+    extraStorage = {}
+) {
+    chrome.storage.sync.set({ quickAccessLinks: links, ...extraStorage }, () => {
         if (chrome.runtime.lastError) {
             jsonError.textContent = `Save failed: ${chrome.runtime.lastError.message}`;
             jsonError.classList.add("show");
             return;
         }
 
-        chrome.storage.sync.get(["quickAccessLinks"], (stored) => {
+        chrome.storage.sync.get(
+            ["quickAccessLinks", "githubToken", "extensionSettings"],
+            (stored) => {
             const persisted = stored.quickAccessLinks || [];
             initQuickLinks(persisted);
             displayConfiguredLinks(persisted);
             jsonEditor.value = JSON.stringify(persisted, null, 2);
             updateJsonLineNumbers();
+            if (typeof stored.githubToken === "string") {
+                savedToken = stored.githubToken;
+                displayTokenSpan.textContent = savedToken
+                    ? "••••••••••••••••••••"
+                    : "";
+            }
+            applySettingsToCheckboxes(stored.extensionSettings || {});
             jsonError.classList.remove("show");
             showStatus("Quick access links saved!", "success");
 
@@ -521,8 +568,30 @@ function persistQuickLinksAndSyncUI(links, showButtonFeedback = false) {
                 saveJsonBtn.textContent = orig;
                 saveJsonBtn.disabled = false;
             }, 1500);
-        });
+            }
+        );
     });
+}
+
+function applySettingsToCheckboxes(rawSettings) {
+    const settings = {
+        showImportButton: true,
+        showQuickAccessLinks: true,
+        showForkUpstreamButtons: true,
+        showRawPageButtons: true,
+        enableHotkeys: true,
+        ...(rawSettings || {}),
+    };
+    setupImportBtn.checked = settings.showImportButton;
+    setupQuickLinks.checked = settings.showQuickAccessLinks;
+    setupForkUpstream.checked = settings.showForkUpstreamButtons;
+    setupRawPage.checked = settings.showRawPageButtons;
+    setupHotkeys.checked = settings.enableHotkeys;
+    configImportBtn.checked = settings.showImportButton;
+    configQuickLinks.checked = settings.showQuickAccessLinks;
+    configForkUpstream.checked = settings.showForkUpstreamButtons;
+    configRawPage.checked = settings.showRawPageButtons;
+    configHotkeys.checked = settings.enableHotkeys;
 }
 
 // Collect quick links from inputs
