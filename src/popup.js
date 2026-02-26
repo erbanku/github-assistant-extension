@@ -22,6 +22,7 @@ const jsonViewContainer = document.getElementById("json-view-container");
 const jsonEditor = document.getElementById("json-editor");
 const jsonError = document.getElementById("json-error");
 const jsonLineNumbers = document.getElementById("json-line-numbers");
+const saveJsonBtn = document.getElementById("save-json-btn");
 const resetLinksBtn = document.getElementById("reset-links-btn");
 
 // Settings checkboxes
@@ -189,6 +190,38 @@ jsonEditor.addEventListener("blur", () => {
         jsonError.classList.remove("show");
     } catch (e) {
         // Invalid JSON - don't save
+    }
+});
+
+// Save JSON button - save and sync form view
+saveJsonBtn.addEventListener("click", () => {
+    try {
+        const data = JSON.parse(jsonEditor.value || "[]");
+        if (!Array.isArray(data)) throw new Error("JSON must be an array");
+        for (const item of data) {
+            if (item.url && !isValidGitHubUrl(item.url)) {
+                throw new Error(`Invalid GitHub URL: ${item.url}`);
+            }
+        }
+        const limitedData = data.slice(0, 5);
+        chrome.storage.sync.set({ quickAccessLinks: limitedData }, () => {
+            jsonError.classList.remove("show");
+            // Sync to form view
+            initQuickLinks(limitedData);
+            // Sync to configured links if in configured view
+            displayConfiguredLinks(limitedData);
+            // Visual feedback
+            const orig = saveJsonBtn.textContent;
+            saveJsonBtn.textContent = "Saved!";
+            saveJsonBtn.disabled = true;
+            setTimeout(() => {
+                saveJsonBtn.textContent = orig;
+                saveJsonBtn.disabled = false;
+            }, 1500);
+        });
+    } catch (e) {
+        jsonError.textContent = `Invalid JSON: ${e.message}`;
+        jsonError.classList.add("show");
     }
 });
 
