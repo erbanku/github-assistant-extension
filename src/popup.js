@@ -628,6 +628,7 @@ chrome.storage.sync.get(
             showQuickAccessLinks: true,
             showForkUpstreamButtons: true,
             showRawPageButtons: true,
+            enableHotkeys: true,
         };
         const settings = {
             ...defaultSettings,
@@ -643,6 +644,8 @@ chrome.storage.sync.get(
         configQuickLinks.checked = settings.showQuickAccessLinks;
         configForkUpstream.checked = settings.showForkUpstreamButtons;
         configRawPage.checked = settings.showRawPageButtons;
+        setupHotkeys.checked = settings.enableHotkeys;
+        configHotkeys.checked = settings.enableHotkeys;
 
         if (data.githubToken) {
             savedToken = data.githubToken;
@@ -949,6 +952,7 @@ function saveSettings() {
         showQuickAccessLinks: setupQuickLinks.checked,
         showForkUpstreamButtons: setupForkUpstream.checked,
         showRawPageButtons: setupRawPage.checked,
+        enableHotkeys: setupHotkeys.checked,
     };
     chrome.storage.sync.set({ extensionSettings: settings });
 }
