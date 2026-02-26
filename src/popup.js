@@ -151,10 +151,13 @@ formViewBtn.addEventListener("click", () => {
     jsonViewContainer.classList.remove("active");
     jsonError.classList.remove("show");
 
-    // Sync from JSON to form if there are changes
+    // Sync from JSON to form and save to storage if valid
     try {
         const jsonData = JSON.parse(jsonEditor.value || "[]");
-        initQuickLinks(jsonData);
+        if (!Array.isArray(jsonData)) throw new Error("JSON must be an array");
+        const limitedData = jsonData.slice(0, 5);
+        chrome.storage.sync.set({ quickAccessLinks: limitedData });
+        initQuickLinks(limitedData);
     } catch (e) {
         // Keep existing form data if JSON is invalid
     }
@@ -172,6 +175,21 @@ jsonViewBtn.addEventListener("click", () => {
     const links = collectQuickLinks();
     jsonEditor.value = JSON.stringify(links, null, 2);
     updateJsonLineNumbers();
+});
+
+// Save JSON immediately on blur (handles popup-close and focus-away cases)
+jsonEditor.addEventListener("blur", () => {
+    try {
+        const data = JSON.parse(jsonEditor.value || "[]");
+        if (!Array.isArray(data)) return;
+        for (const item of data) {
+            if (item.url && !isValidGitHubUrl(item.url)) return;
+        }
+        chrome.storage.sync.set({ quickAccessLinks: data.slice(0, 5) });
+        jsonError.classList.remove("show");
+    } catch (e) {
+        // Invalid JSON - don't save
+    }
 });
 
 // Validate and auto-save JSON
