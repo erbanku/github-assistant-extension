@@ -183,10 +183,10 @@ jsonEditor.addEventListener("blur", () => {
     try {
         const data = JSON.parse(jsonEditor.value || "[]");
         if (!Array.isArray(data)) return;
-        for (const item of data) {
+        const normalized = normalizeQuickLinksFromJson(data);
+        for (const item of normalized) {
             if (item.url && !isValidGitHubUrl(item.url)) return;
         }
-        const normalized = normalizeQuickLinksFromJson(data);
         persistQuickLinksAndSyncUI(normalized);
         jsonError.classList.remove("show");
     } catch (e) {
@@ -199,12 +199,12 @@ saveJsonBtn.addEventListener("click", () => {
     try {
         const data = JSON.parse(jsonEditor.value || "[]");
         if (!Array.isArray(data)) throw new Error("JSON must be an array");
-        for (const item of data) {
+        const limitedData = normalizeQuickLinksFromJson(data);
+        for (const item of limitedData) {
             if (item.url && !isValidGitHubUrl(item.url)) {
                 throw new Error(`Invalid GitHub URL: ${item.url}`);
             }
         }
-        const limitedData = normalizeQuickLinksFromJson(data);
         persistQuickLinksAndSyncUI(limitedData, true);
     } catch (e) {
         jsonError.textContent = `Invalid JSON: ${e.message}`;
@@ -455,12 +455,26 @@ function isValidGitHubUrl(url) {
 }
 
 function normalizeQuickLinksFromJson(data) {
-    return data.slice(0, 5).map((item, idx) => ({
-        name: (item && item.name ? String(item.name) : "").trim(),
-        link_num: `LINK ${idx + 1}`,
-        url: (item && item.url ? String(item.url) : "").trim(),
-        color: item && item.color ? item.color : "blue",
-    }));
+    const allowedColors = new Set(["blue", "yellow", "green", "purple"]);
+    return data
+        .slice(0, 5)
+        .map((item, idx) => {
+            const rawUrl =
+                item && (item.url ?? item.link ?? item.href)
+                    ? String(item.url ?? item.link ?? item.href)
+                    : "";
+            const normalizedColor =
+                item && item.color && allowedColors.has(String(item.color))
+                    ? String(item.color)
+                    : "blue";
+            return {
+                name: (item && item.name ? String(item.name) : "").trim(),
+                link_num: `LINK ${idx + 1}`,
+                url: rawUrl.trim(),
+                color: normalizedColor,
+            };
+        })
+        .filter((item) => item.url || item.name);
 }
 
 function persistQuickLinksAndSyncUI(links, showButtonFeedback = false) {
@@ -478,6 +492,7 @@ function persistQuickLinksAndSyncUI(links, showButtonFeedback = false) {
             jsonEditor.value = JSON.stringify(persisted, null, 2);
             updateJsonLineNumbers();
             jsonError.classList.remove("show");
+            showStatus("Quick access links saved!", "success");
 
             if (!showButtonFeedback) return;
             const orig = saveJsonBtn.textContent;
