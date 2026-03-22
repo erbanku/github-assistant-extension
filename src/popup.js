@@ -46,6 +46,152 @@ const cancelHotkeysBtn = document.getElementById("cancel-hotkeys-btn");
 
 let savedToken = "";
 let currentView = "form";
+const QUICK_LINKS_STORAGE_KEY = "quickAccessLinks";
+const QUICK_LINKS_STORAGE_AREA_KEY = "quickAccessLinksStorageArea";
+
+function isQuotaExceededError(error) {
+    const runtimeError = chrome.runtime && chrome.runtime.lastError;
+    const message =
+        (error && typeof error.message === "string" && error.message) ||
+        (runtimeError &&
+            typeof runtimeError.message === "string" &&
+            runtimeError.message) ||
+        "";
+
+    return /quota|MAX_ITEMS|MAX_WRITE_OPERATIONS/i.test(message);
+}
+
+function syncGet(keys) {
+    return new Promise((resolve, reject) => {
+        chrome.storage.sync.get(keys, (result) => {
+            if (chrome.runtime.lastError) {
+                reject(new Error(chrome.runtime.lastError.message));
+                return;
+            }
+            resolve(result);
+        });
+    });
+}
+
+function localGet(keys) {
+    return new Promise((resolve, reject) => {
+        chrome.storage.local.get(keys, (result) => {
+            if (chrome.runtime.lastError) {
+                reject(new Error(chrome.runtime.lastError.message));
+                return;
+            }
+            resolve(result);
+        });
+    });
+}
+
+function syncSet(items) {
+    return new Promise((resolve, reject) => {
+        chrome.storage.sync.set(items, () => {
+            if (chrome.runtime.lastError) {
+                reject(new Error(chrome.runtime.lastError.message));
+                return;
+            }
+            resolve();
+        });
+    });
+}
+
+function localSet(items) {
+    return new Promise((resolve, reject) => {
+        chrome.storage.local.set(items, () => {
+            if (chrome.runtime.lastError) {
+                reject(new Error(chrome.runtime.lastError.message));
+                return;
+            }
+            resolve();
+        });
+    });
+}
+
+function syncRemove(keys) {
+    return new Promise((resolve, reject) => {
+        chrome.storage.sync.remove(keys, () => {
+            if (chrome.runtime.lastError) {
+                reject(new Error(chrome.runtime.lastError.message));
+                return;
+            }
+            resolve();
+        });
+    });
+}
+
+function localRemove(keys) {
+    return new Promise((resolve, reject) => {
+        chrome.storage.local.remove(keys, () => {
+            if (chrome.runtime.lastError) {
+                reject(new Error(chrome.runtime.lastError.message));
+                return;
+            }
+            resolve();
+        });
+    });
+}
+
+async function loadQuickAccessLinks() {
+    const [syncResult, localResult] = await Promise.all([
+        syncGet([QUICK_LINKS_STORAGE_KEY, QUICK_LINKS_STORAGE_AREA_KEY]),
+        localGet([QUICK_LINKS_STORAGE_KEY, QUICK_LINKS_STORAGE_AREA_KEY]),
+    ]);
+
+    if (
+        localResult[QUICK_LINKS_STORAGE_AREA_KEY] === "local" &&
+        Array.isArray(localResult[QUICK_LINKS_STORAGE_KEY])
+    ) {
+        return localResult[QUICK_LINKS_STORAGE_KEY];
+    }
+
+    if (
+        syncResult[QUICK_LINKS_STORAGE_AREA_KEY] === "sync" &&
+        Array.isArray(syncResult[QUICK_LINKS_STORAGE_KEY])
+    ) {
+        return syncResult[QUICK_LINKS_STORAGE_KEY];
+    }
+
+    if (Array.isArray(syncResult[QUICK_LINKS_STORAGE_KEY])) {
+        return syncResult[QUICK_LINKS_STORAGE_KEY];
+    }
+
+    if (Array.isArray(localResult[QUICK_LINKS_STORAGE_KEY])) {
+        return localResult[QUICK_LINKS_STORAGE_KEY];
+    }
+
+    return [];
+}
+
+async function saveQuickAccessLinks(links) {
+    try {
+        await syncSet({
+            [QUICK_LINKS_STORAGE_KEY]: links,
+            [QUICK_LINKS_STORAGE_AREA_KEY]: "sync",
+        });
+        await localRemove([
+            QUICK_LINKS_STORAGE_KEY,
+            QUICK_LINKS_STORAGE_AREA_KEY,
+        ]);
+    } catch (error) {
+        if (!isQuotaExceededError(error)) {
+            throw error;
+        }
+
+        console.log(
+            "Quick access links too large for sync storage, using local storage"
+        );
+        await localSet({
+            [QUICK_LINKS_STORAGE_KEY]: links,
+            [QUICK_LINKS_STORAGE_AREA_KEY]: "local",
+        });
+        await syncRemove([
+            QUICK_LINKS_STORAGE_KEY,
+            QUICK_LINKS_STORAGE_AREA_KEY,
+        ]);
+    }
+}
 
 // Reset links by fetching organizations again
 resetLinksBtn.addEventListener("click", async () => {
@@ -85,7 +231,7 @@ resetLinksBtn.addEventListener("click", async () => {
             }));
 
             // Save and update UI
-            chrome.storage.sync.set({ quickAccessLinks: newLinks }, () => {
+            saveQuickAccessLinks(newLinks).then(() => {
                 initQuickLinks(newLinks);
                 jsonEditor.value = JSON.stringify(newLinks, null, 2);
                 updateJsonLineNumbers();
@@ -96,6 +242,11 @@ resetLinksBtn.addEventListener("click", async () => {
                 setTimeout(() => {
                     statusDiv.style.display = "none";
                 }, 2000);
+            }).catch((error) => {
+                showStatus(
+                    `Failed to reset quick access links: ${error.message}`,
+                    "error"
+                );
             });
         } else {
             showStatus(
@@ -157,7 +308,9 @@ formViewBtn.addEventListener("click", () => {
         const jsonData = JSON.parse(jsonEditor.value || "[]");
         const quickLinksData = extractQuickLinksFromJsonInput(jsonData);
         const limitedData = normalizeQuickLinksFromJson(quickLinksData);
-        chrome.storage.sync.set({ quickAccessLinks: limitedData });
+        saveQuickAccessLinks(limitedData).catch((error) => {
+            console.error("Failed to save quick links from JSON view:", error);
+        });
         initQuickLinks(limitedData);
     } catch (e) {
         // Keep existing form data if JSON is invalid
@@ -250,10 +403,11 @@ jsonEditor.addEventListener(
             const limitedData = normalizeQuickLinksFromJson(quickLinksData);
 
             // Save if valid
-            chrome.storage.sync.set({ quickAccessLinks: limitedData }, () => {
-                if (chrome.runtime.lastError) return;
+            saveQuickAccessLinks(limitedData).then(() => {
                 console.log("Quick links saved from JSON");
                 jsonError.classList.remove("show");
+            }).catch(() => {
+                // Keep existing editor state if save fails.
             });
         } catch (e) {
             jsonError.textContent = `Invalid JSON: ${e.message}`;
@@ -423,13 +577,15 @@ function autoSaveQuickLinks() {
         }
     }
 
-    chrome.storage.sync.set({ quickAccessLinks: quickLinks }, () => {
+    saveQuickAccessLinks(quickLinks).then(() => {
         console.log("Quick links auto-saved");
         // Sync to JSON editor if currently in form view
         if (currentView === "form") {
             jsonEditor.value = JSON.stringify(quickLinks, null, 2);
             updateJsonLineNumbers();
         }
+    }).catch((error) => {
+        console.error("Failed to auto-save quick links:", error);
     });
 }
 
@@ -536,60 +692,63 @@ function normalizeQuickLinksFromJson(data) {
         .filter((item) => item.url || item.name);
 }
 
-function persistQuickLinksAndSyncUI(
+async function persistQuickLinksAndSyncUI(
     links,
     showButtonFeedback = false,
     extraStorage = {},
     showAllSettingsInEditor = false
 ) {
-    chrome.storage.sync.set({ quickAccessLinks: links, ...extraStorage }, () => {
-        if (chrome.runtime.lastError) {
-            jsonError.textContent = `Save failed: ${chrome.runtime.lastError.message}`;
-            jsonError.classList.add("show");
-            return;
+    try {
+        await saveQuickAccessLinks(links);
+        if (Object.keys(extraStorage).length > 0) {
+            await syncSet(extraStorage);
         }
 
-        chrome.storage.sync.get(
-            ["quickAccessLinks", "githubToken", "extensionSettings"],
-            (stored) => {
-            const persisted = stored.quickAccessLinks || [];
-            initQuickLinks(persisted);
-            displayConfiguredLinks(persisted);
-            if (showAllSettingsInEditor) {
-                jsonEditor.value = JSON.stringify(
-                    {
-                        githubToken: stored.githubToken || "",
-                        quickAccessLinks: persisted,
-                        extensionSettings: stored.extensionSettings || {},
-                    },
-                    null,
-                    2
-                );
-            } else {
-                jsonEditor.value = JSON.stringify(persisted, null, 2);
-            }
-            updateJsonLineNumbers();
-            if (typeof stored.githubToken === "string") {
-                savedToken = stored.githubToken;
-                displayTokenSpan.textContent = savedToken
-                    ? "••••••••••••••••••••"
-                    : "";
-            }
-            applySettingsToCheckboxes(stored.extensionSettings || {});
-            jsonError.classList.remove("show");
-            showStatus("Quick access links saved!", "success");
+        const [storedSync, persisted] = await Promise.all([
+            syncGet(["githubToken", "extensionSettings"]),
+            loadQuickAccessLinks(),
+        ]);
 
-            if (!showButtonFeedback) return;
-            const orig = saveJsonBtn.textContent;
-            saveJsonBtn.textContent = "Saved!";
-            saveJsonBtn.disabled = true;
-            setTimeout(() => {
-                saveJsonBtn.textContent = orig;
-                saveJsonBtn.disabled = false;
-            }, 1500);
-            }
-        );
-    });
+        initQuickLinks(persisted);
+        displayConfiguredLinks(persisted);
+        if (showAllSettingsInEditor) {
+            jsonEditor.value = JSON.stringify(
+                {
+                    githubToken: storedSync.githubToken || "",
+                    quickAccessLinks: persisted,
+                    extensionSettings: storedSync.extensionSettings || {},
+                },
+                null,
+                2
+            );
+        } else {
+            jsonEditor.value = JSON.stringify(persisted, null, 2);
+        }
+        updateJsonLineNumbers();
+        if (typeof storedSync.githubToken === "string") {
+            savedToken = storedSync.githubToken;
+            displayTokenSpan.textContent = savedToken
+                ? "••••••••••••••••••••"
+                : "";
+        }
+        applySettingsToCheckboxes(storedSync.extensionSettings || {});
+        jsonError.classList.remove("show");
+        showStatus("Quick access links saved!", "success");
+
+        if (!showButtonFeedback) {
+            return;
+        }
+        const orig = saveJsonBtn.textContent;
+        saveJsonBtn.textContent = "Saved!";
+        saveJsonBtn.disabled = true;
+        setTimeout(() => {
+            saveJsonBtn.textContent = orig;
+            saveJsonBtn.disabled = false;
+        }, 1500);
+    } catch (error) {
+        jsonError.textContent = `Save failed: ${error.message}`;
+        jsonError.classList.add("show");
+    }
 }
 
 function applySettingsToCheckboxes(rawSettings) {
@@ -638,9 +797,10 @@ function collectQuickLinks() {
 }
 
 // Load saved token on popup open
-chrome.storage.sync.get(
-    ["githubToken", "quickAccessLinks", "extensionSettings"],
-    async (data) => {
+Promise.all([
+    syncGet(["githubToken", "extensionSettings"]),
+    loadQuickAccessLinks(),
+]).then(async ([data, quickAccessLinks]) => {
         // Load settings
         const defaultSettings = {
             showImportButton: true,
@@ -671,9 +831,9 @@ chrome.storage.sync.get(
             displayTokenSpan.textContent = "••••••••••••••••••••";
             // If we have a token but no quick links, fetch orgs as defaults
             if (
-                !data.quickAccessLinks ||
-                data.quickAccessLinks.length === 0 ||
-                data.quickAccessLinks.every((link) => !link.url)
+                !quickAccessLinks ||
+                quickAccessLinks.length === 0 ||
+                quickAccessLinks.every((link) => !link.url)
             ) {
                 try {
                     const orgsResponse = await fetch(
@@ -704,33 +864,33 @@ chrome.storage.sync.get(
                             }));
 
                         // Save default links
-                        chrome.storage.sync.set({
-                            quickAccessLinks: defaultLinks,
-                        });
+                        await saveQuickAccessLinks(defaultLinks);
                         displayConfiguredLinks(defaultLinks);
                         initQuickLinks(defaultLinks);
                     } else {
-                        displayConfiguredLinks(data.quickAccessLinks || []);
-                        initQuickLinks(data.quickAccessLinks || []);
+                        displayConfiguredLinks(quickAccessLinks || []);
+                        initQuickLinks(quickAccessLinks || []);
                     }
                 } catch (err) {
                     console.log("Could not fetch organizations");
-                    displayConfiguredLinks(data.quickAccessLinks || []);
-                    initQuickLinks(data.quickAccessLinks || []);
+                    displayConfiguredLinks(quickAccessLinks || []);
+                    initQuickLinks(quickAccessLinks || []);
                 }
             } else {
-                displayConfiguredLinks(data.quickAccessLinks || []);
-                initQuickLinks(data.quickAccessLinks || []);
+                displayConfiguredLinks(quickAccessLinks || []);
+                initQuickLinks(quickAccessLinks || []);
             }
             showConfiguredView();
         } else {
             document.getElementById("token-section").style.display = "block";
             document.getElementById("links-section").style.display = "block";
             showSetupView();
-            initQuickLinks(data.quickAccessLinks || []);
+            initQuickLinks(quickAccessLinks || []);
         }
-    }
-);
+    })
+    .catch((error) => {
+        console.error("Failed to load popup state:", error);
+    });
 
 // Save token
 saveBtn.addEventListener("click", async () => {
@@ -754,20 +914,24 @@ saveBtn.addEventListener("click", async () => {
 
     // If only editing links (token section hidden)
     if (!tokenSectionVisible) {
-        chrome.storage.sync.set({ quickAccessLinks: quickLinks }, () => {
+        saveQuickAccessLinks(quickLinks).then(() => {
             showStatus("Quick access links saved!", "success");
             setTimeout(() => {
                 showConfiguredView();
                 displayConfiguredLinks(quickLinks);
             }, 1000);
+        }).catch((error) => {
+            showStatus(`Failed to save quick access links: ${error.message}`, "error");
         });
         return;
     }
 
     if (!token) {
         // Allow saving just quick links without token
-        chrome.storage.sync.set({ quickAccessLinks: quickLinks }, () => {
+        saveQuickAccessLinks(quickLinks).then(() => {
             showStatus("Quick access links saved!", "success");
+        }).catch((error) => {
+            showStatus(`Failed to save quick access links: ${error.message}`, "error");
         });
         return;
     }
@@ -852,19 +1016,16 @@ saveBtn.addEventListener("click", async () => {
             }
 
             // Save token and quick links
-            chrome.storage.sync.set(
-                { githubToken: token, quickAccessLinks: linksToSave },
-                () => {
-                    showStatus(
-                        `✓ Token saved! Authenticated as ${user.login}`,
-                        "success"
-                    );
-                    setTimeout(() => {
-                        showConfiguredView();
-                        displayConfiguredLinks(linksToSave);
-                    }, 1500);
-                }
+            await saveQuickAccessLinks(linksToSave);
+            await syncSet({ githubToken: token });
+            showStatus(
+                `✓ Token saved! Authenticated as ${user.login}`,
+                "success"
             );
+            setTimeout(() => {
+                showConfiguredView();
+                displayConfiguredLinks(linksToSave);
+            }, 1500);
         } else {
             const error = await response.json();
             showStatus(
@@ -885,15 +1046,17 @@ saveBtn.addEventListener("click", async () => {
 });
 
 // Change token
-changeTokenBtn.addEventListener("click", () => {
-    chrome.storage.sync.get(["quickAccessLinks"], (data) => {
-        initQuickLinks(data.quickAccessLinks || []);
+changeTokenBtn.addEventListener("click", async () => {
+    loadQuickAccessLinks().then((quickAccessLinks) => {
+        initQuickLinks(quickAccessLinks || []);
         tokenInput.value = "";
         tokenInput.disabled = false;
         document.getElementById("token-section").style.display = "block";
         document.getElementById("links-section").style.display = "none";
         showSetupView();
         tokenInput.focus();
+    }).catch((error) => {
+        showStatus(`Failed to load quick access links: ${error.message}`, "error");
     });
 });
 
@@ -916,11 +1079,13 @@ removeTokenBtn.addEventListener("click", () => {
 
 // Edit links button
 editLinksBtn.addEventListener("click", () => {
-    chrome.storage.sync.get(["quickAccessLinks"], (data) => {
-        initQuickLinks(data.quickAccessLinks || []);
+    loadQuickAccessLinks().then((quickAccessLinks) => {
+        initQuickLinks(quickAccessLinks || []);
         document.getElementById("token-section").style.display = "none";
         document.getElementById("links-section").style.display = "block";
         showSetupView();
+    }).catch((error) => {
+        showStatus(`Failed to load quick access links: ${error.message}`, "error");
     });
 });
 
@@ -1134,13 +1299,14 @@ function updateAllSettingsLineNumbers() {
 // Show all settings editor
 viewAllSettingsBtn.addEventListener('click', async () => {
     // Load all settings
-    const result = await new Promise((resolve) => {
-        chrome.storage.sync.get(['githubToken', 'quickAccessLinks', 'extensionSettings'], resolve);
-    });
+    const [result, quickAccessLinks] = await Promise.all([
+        syncGet(['githubToken', 'extensionSettings']),
+        loadQuickAccessLinks(),
+    ]);
 
     const allSettings = {
         githubToken: result.githubToken || '',
-        quickAccessLinks: result.quickAccessLinks || [],
+        quickAccessLinks,
         extensionSettings: result.extensionSettings || {}
     };
 
@@ -1161,19 +1327,10 @@ saveAllSettingsBtn.addEventListener('click', async () => {
             throw new Error('Settings must be an object');
         }
 
-        // Save to storage
-        await new Promise((resolve, reject) => {
-            chrome.storage.sync.set({
-                githubToken: allSettings.githubToken || '',
-                quickAccessLinks: allSettings.quickAccessLinks || [],
-                extensionSettings: allSettings.extensionSettings || {}
-            }, () => {
-                if (chrome.runtime.lastError) {
-                    reject(chrome.runtime.lastError);
-                } else {
-                    resolve();
-                }
-            });
+        await saveQuickAccessLinks(allSettings.quickAccessLinks || []);
+        await syncSet({
+            githubToken: allSettings.githubToken || '',
+            extensionSettings: allSettings.extensionSettings || {}
         });
 
         allSettingsEditor.style.display = 'none';

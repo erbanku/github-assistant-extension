@@ -2,6 +2,8 @@
 let cachedQuickAccessLinks = null;
 let cachedGithubToken = null;
 let cachedSettings = null;
+const QUICK_LINKS_STORAGE_KEY = "quickAccessLinks";
+const QUICK_LINKS_STORAGE_AREA_KEY = "quickAccessLinksStorageArea";
 
 // Global flag to ensure hotkeys are only initialized once
 let hotkeysInitialized = false;
@@ -27,10 +29,105 @@ const DEFAULT_SETTINGS = {
 
 // Load quick access links into cache
 async function loadQuickAccessLinksCache() {
-    const result = await new Promise((resolve) => {
-        chrome.storage.sync.get(["quickAccessLinks"], resolve);
-    });
-    cachedQuickAccessLinks = result.quickAccessLinks || [];
+    const [syncResult, localResult] = await Promise.all([
+        new Promise((resolve) => {
+            chrome.storage.sync.get(
+                [QUICK_LINKS_STORAGE_KEY, QUICK_LINKS_STORAGE_AREA_KEY],
+                resolve
+            );
+        }),
+        new Promise((resolve) => {
+            chrome.storage.local.get(
+                [QUICK_LINKS_STORAGE_KEY, QUICK_LINKS_STORAGE_AREA_KEY],
+                resolve
+            );
+        }),
+    ]);
+
+    if (
+        localResult[QUICK_LINKS_STORAGE_AREA_KEY] === "local" &&
+        Array.isArray(localResult[QUICK_LINKS_STORAGE_KEY])
+    ) {
+        cachedQuickAccessLinks = localResult[QUICK_LINKS_STORAGE_KEY];
+        return;
+    }
+
+    if (
+        syncResult[QUICK_LINKS_STORAGE_AREA_KEY] === "sync" &&
+        Array.isArray(syncResult[QUICK_LINKS_STORAGE_KEY])
+    ) {
+        cachedQuickAccessLinks = syncResult[QUICK_LINKS_STORAGE_KEY];
+        return;
+    }
+
+    if (Array.isArray(syncResult[QUICK_LINKS_STORAGE_KEY])) {
+        cachedQuickAccessLinks = syncResult[QUICK_LINKS_STORAGE_KEY];
+        return;
+    }
+
+    if (Array.isArray(localResult[QUICK_LINKS_STORAGE_KEY])) {
+        cachedQuickAccessLinks = localResult[QUICK_LINKS_STORAGE_KEY];
+        return;
+    }
+
+    cachedQuickAccessLinks = [];
+}
+
+function handleQuickAccessLinkStorageChange(changes, areaName) {
+    if (!changes[QUICK_LINKS_STORAGE_KEY] && !changes[QUICK_LINKS_STORAGE_AREA_KEY]) {
+        return;
+    }
+
+    const areaValue = changes[QUICK_LINKS_STORAGE_AREA_KEY]
+        ? changes[QUICK_LINKS_STORAGE_AREA_KEY].newValue
+        : undefined;
+    const linksValue = changes[QUICK_LINKS_STORAGE_KEY]
+        ? changes[QUICK_LINKS_STORAGE_KEY].newValue
+        : undefined;
+
+    if (areaName === "local" && areaValue === "local" && Array.isArray(linksValue)) {
+        cachedQuickAccessLinks = linksValue;
+        injectQuickAccessButtons();
+        return;
+    }
+
+    if (areaName === "sync" && areaValue === "sync" && Array.isArray(linksValue)) {
+        cachedQuickAccessLinks = linksValue;
+        injectQuickAccessButtons();
+        return;
+    }
+
+    if (
+        areaName === "local" &&
+        changes[QUICK_LINKS_STORAGE_KEY] &&
+        Array.isArray(linksValue) &&
+        cachedQuickAccessLinks !== null
+    ) {
+        cachedQuickAccessLinks = linksValue;
+        injectQuickAccessButtons();
+        return;
+    }
+
+    if (
+        areaName === "sync" &&
+        changes[QUICK_LINKS_STORAGE_KEY] &&
+        Array.isArray(linksValue) &&
+        cachedQuickAccessLinks !== null
+    ) {
+        cachedQuickAccessLinks = linksValue;
+        injectQuickAccessButtons();
+        return;
+    }
+
+    if (
+        changes[QUICK_LINKS_STORAGE_KEY] &&
+        !Array.isArray(linksValue) &&
+        changes[QUICK_LINKS_STORAGE_AREA_KEY]
+    ) {
+        loadQuickAccessLinksCache().then(() => {
+            injectQuickAccessButtons();
+        });
+    }
 }
 
 // Load GitHub token into cache
@@ -78,12 +175,11 @@ async function loadSettingsCache() {
 
 // Listen for storage changes to update cache
 chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === "sync" || areaName === "local") {
+        handleQuickAccessLinkStorageChange(changes, areaName);
+    }
+
     if (areaName === "sync") {
-        if (changes.quickAccessLinks) {
-            cachedQuickAccessLinks = changes.quickAccessLinks.newValue || [];
-            // Re-inject buttons with new settings
-            injectQuickAccessButtons();
-        }
         if (changes.githubToken) {
             cachedGithubToken = changes.githubToken.newValue || null;
             // Re-initialize to update fork/upstream/import buttons
