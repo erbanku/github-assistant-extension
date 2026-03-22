@@ -6,6 +6,7 @@ const QUICK_LINKS_STORAGE_KEY = "quickAccessLinks";
 const QUICK_LINKS_STORAGE_AREA_KEY = "quickAccessLinksStorageArea";
 let quickAccessButtonsObserver = null;
 let quickAccessButtonsRaf = null;
+let quickAccessButtonsInjecting = false;
 
 // Global flag to ensure hotkeys are only initialized once
 let hotkeysInitialized = false;
@@ -379,6 +380,19 @@ function stopQuickAccessButtonsObserver() {
     }
 }
 
+async function ensureQuickAccessButtons() {
+    if (quickAccessButtonsInjecting) {
+        return;
+    }
+
+    quickAccessButtonsInjecting = true;
+    try {
+        await injectQuickAccessButtons();
+    } finally {
+        quickAccessButtonsInjecting = false;
+    }
+}
+
 function scheduleQuickAccessButtonsInjection() {
     if (
         window.location.hostname.includes("raw.githubusercontent.com") ||
@@ -392,48 +406,54 @@ function scheduleQuickAccessButtonsInjection() {
 
         const topNavCenter = document.querySelector('[data-testid="top-nav-center"]');
         if (!topNavCenter) {
-            return false;
+            return;
         }
 
-        await injectQuickAccessButtons();
-        return !!document.getElementById("github-assistant-quick-access-container");
+        await ensureQuickAccessButtons();
     };
 
-    stopQuickAccessButtonsObserver();
-
-    quickAccessButtonsRaf = requestAnimationFrame(() => {
-        tryInject().then((injected) => {
-            if (injected) {
-                stopQuickAccessButtonsObserver();
-                return;
-            }
-
-            quickAccessButtonsObserver = new MutationObserver(() => {
-                if (
-                    document.getElementById(
-                        "github-assistant-quick-access-container"
-                    )
-                ) {
-                    stopQuickAccessButtonsObserver();
-                    return;
-                }
-
-                tryInject().then((done) => {
-                    if (done) {
-                        stopQuickAccessButtonsObserver();
-                    }
-                });
+    if (quickAccessButtonsRaf === null) {
+        quickAccessButtonsRaf = requestAnimationFrame(() => {
+            tryInject().catch((error) => {
+                console.error(
+                    "GitHub Assistant: Failed to ensure quick access buttons:",
+                    error
+                );
             });
-
-            quickAccessButtonsObserver.observe(document.documentElement, {
-                childList: true,
-                subtree: true,
-            });
-
-            setTimeout(() => {
-                stopQuickAccessButtonsObserver();
-            }, 5000);
         });
+    }
+
+    if (quickAccessButtonsObserver) {
+        return;
+    }
+
+    quickAccessButtonsObserver = new MutationObserver(() => {
+        const container = document.getElementById(
+            "github-assistant-quick-access-container"
+        );
+        const topNavCenter = document.querySelector('[data-testid="top-nav-center"]');
+
+        if (container && topNavCenter && topNavCenter.contains(container)) {
+            return;
+        }
+
+        if (quickAccessButtonsRaf !== null) {
+            return;
+        }
+
+        quickAccessButtonsRaf = requestAnimationFrame(() => {
+            tryInject().catch((error) => {
+                console.error(
+                    "GitHub Assistant: Failed to re-ensure quick access buttons:",
+                    error
+                );
+            });
+        });
+    });
+
+    quickAccessButtonsObserver.observe(document.documentElement, {
+        childList: true,
+        subtree: true,
     });
 }
 
