@@ -4,6 +4,8 @@ let cachedGithubToken = null;
 let cachedSettings = null;
 const QUICK_LINKS_STORAGE_KEY = "quickAccessLinks";
 const QUICK_LINKS_STORAGE_AREA_KEY = "quickAccessLinksStorageArea";
+let quickAccessButtonsObserver = null;
+let quickAccessButtonsRaf = null;
 
 // Global flag to ensure hotkeys are only initialized once
 let hotkeysInitialized = false;
@@ -360,6 +362,67 @@ async function injectQuickAccessButtons() {
     console.log(
         `GitHub Assistant: Injected ${activeLinks.length} quick access button(s)`,
     );
+}
+
+function stopQuickAccessButtonsObserver() {
+    if (quickAccessButtonsObserver) {
+        quickAccessButtonsObserver.disconnect();
+        quickAccessButtonsObserver = null;
+    }
+
+    if (quickAccessButtonsRaf !== null) {
+        cancelAnimationFrame(quickAccessButtonsRaf);
+        quickAccessButtonsRaf = null;
+    }
+}
+
+function scheduleQuickAccessButtonsInjection() {
+    if (
+        window.location.hostname.includes("raw.githubusercontent.com") ||
+        window.location.hostname.includes("gist.githubusercontent.com")
+    ) {
+        return;
+    }
+
+    const tryInject = async () => {
+        quickAccessButtonsRaf = null;
+
+        const topNavCenter = document.querySelector('[data-testid="top-nav-center"]');
+        if (!topNavCenter) {
+            return false;
+        }
+
+        await injectQuickAccessButtons();
+        return !!document.getElementById("github-assistant-quick-access-container");
+    };
+
+    stopQuickAccessButtonsObserver();
+
+    quickAccessButtonsRaf = requestAnimationFrame(() => {
+        tryInject().then((injected) => {
+            if (injected) {
+                stopQuickAccessButtonsObserver();
+                return;
+            }
+
+            quickAccessButtonsObserver = new MutationObserver(() => {
+                tryInject().then((done) => {
+                    if (done) {
+                        stopQuickAccessButtonsObserver();
+                    }
+                });
+            });
+
+            quickAccessButtonsObserver.observe(document.documentElement, {
+                childList: true,
+                subtree: true,
+            });
+
+            setTimeout(() => {
+                stopQuickAccessButtonsObserver();
+            }, 5000);
+        });
+    });
 }
 
 async function init() {
@@ -1200,6 +1263,7 @@ async function initRawPage() {
 // ===== END RAW PAGE HANDLERS =====
 
 init();
+scheduleQuickAccessButtonsInjection();
 autofillImportForm();
 initRawPage();
 initHotkeys();
@@ -1223,7 +1287,8 @@ function handleNavigation() {
         document.getElementById("go-to-fork-container")?.remove();
         document.getElementById("back-to-upstream-container")?.remove();
         document.getElementById("import-repo-container")?.remove();
-        document.getElementById("github-assistant-quick-access")?.remove();
+        document.getElementById("github-assistant-quick-access-container")?.remove();
+        scheduleQuickAccessButtonsInjection();
 
         // Reinitialize immediately with minimal delay
         setTimeout(async () => {
