@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "GitHub Assistant",
-    "version": "2.2.1",
+    "version": "2.2.2",
     "description": "Navigate between forks and upstream repos, import repositories, and quickly access/copy raw files from GitHub and Gists",
     "permissions": [ "storage" ],
     "host_permissions": [
