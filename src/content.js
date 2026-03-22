@@ -239,14 +239,6 @@ async function injectQuickAccessButtons() {
         return;
     }
 
-    // Remove existing container if present
-    const existing = document.getElementById(
-        "github-assistant-quick-access-container",
-    );
-    if (existing) {
-        existing.remove();
-    }
-
     // Use cached links if available, otherwise load from storage
     if (cachedQuickAccessLinks === null) {
         await loadQuickAccessLinksCache();
@@ -267,6 +259,17 @@ async function injectQuickAccessButtons() {
             "GitHub Assistant: Could not find top-nav-center for quick access buttons",
         );
         return;
+    }
+
+    const existing = document.getElementById(
+        "github-assistant-quick-access-container",
+    );
+    if (existing && topNavCenter.contains(existing)) {
+        return;
+    }
+
+    if (existing) {
+        existing.remove();
     }
 
     // Find the search button group to insert before it
@@ -406,6 +409,15 @@ function scheduleQuickAccessButtonsInjection() {
             }
 
             quickAccessButtonsObserver = new MutationObserver(() => {
+                if (
+                    document.getElementById(
+                        "github-assistant-quick-access-container"
+                    )
+                ) {
+                    stopQuickAccessButtonsObserver();
+                    return;
+                }
+
                 tryInject().then((done) => {
                     if (done) {
                         stopQuickAccessButtonsObserver();
