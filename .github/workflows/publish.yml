@@ -1,0 +1,41 @@
+name: Publish to Chrome Web Store
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish (e.g. v2.2.3)"
+        required: true
+
+jobs:
+  publish:
+    name: Package and publish extension
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - name: Zip extension source
+        run: |
+          cd src
+          zip -r ../extension.zip .
+          cd ..
+          echo "Created extension.zip"
+
+      - name: Upload to Chrome Web Store
+        uses: trmcnvn/upload-google-chrome-extension@v2
+        with:
+          extension: extension.zip
+          extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
+          client-id: ${{ secrets.CHROME_CLIENT_ID }}
+          client-secret: ${{ secrets.CHROME_CLIENT_SECRET }}
+          refresh-token: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          publish: true
