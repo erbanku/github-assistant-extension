@@ -1,41 +1,94 @@
 name: Publish to Chrome Web Store
 
 on:
-  push:
-    tags:
-      - "v*"
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Tag to publish (e.g. v2.2.3)"
-        required: true
+    push:
+        branches:
+            - main
+        paths:
+            - "src/manifest.json"
+    workflow_dispatch:
 
 jobs:
-  publish:
-    name: Package and publish extension
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    check:
+        name: Check manifest version change
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+        outputs:
+            should_publish: ${{ steps.diff.outputs.changed }}
+            version: ${{ steps.diff.outputs.version }}
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 2
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+            - name: Detect manifest version change
+              id: diff
+              run: |
+                  VERSION=$(python3 -c 'import json; print(json.load(open("src/manifest.json"))["version"])')
+                  echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Zip extension source
-        run: |
-          cd src
-          zip -r ../extension.zip .
-          cd ..
-          echo "Created extension.zip"
+                  if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+                    echo "changed=true" >> $GITHUB_OUTPUT
+                    echo "Manual run: publishing version $VERSION"
+                    exit 0
+                  fi
 
-      - name: Upload to Chrome Web Store
-        uses: trmcnvn/upload-google-chrome-extension@v2
-        with:
-          extension: extension.zip
-          extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
-          client-id: ${{ secrets.CHROME_CLIENT_ID }}
-          client-secret: ${{ secrets.CHROME_CLIENT_SECRET }}
-          refresh-token: ${{ secrets.CHROME_REFRESH_TOKEN }}
-          publish: true
+                  if ! git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+                    echo "changed=true" >> $GITHUB_OUTPUT
+                    echo "No parent commit; publishing version $VERSION"
+                    exit 0
+                  fi
+
+                  PREV=$(git show HEAD~1:src/manifest.json 2>/dev/null | python3 -c 'import sys, json; print(json.load(sys.stdin)["version"])' 2>/dev/null || true)
+                  if [ -z "$PREV" ]; then
+                    echo "changed=true" >> $GITHUB_OUTPUT
+                    echo "No previous manifest; publishing version $VERSION"
+                    exit 0
+                  fi
+
+                  if [ "$VERSION" != "$PREV" ]; then
+                    echo "changed=true" >> $GITHUB_OUTPUT
+                    echo "Version changed: $PREV -> $VERSION"
+                  else
+                    echo "changed=false" >> $GITHUB_OUTPUT
+                    echo "manifest.json updated but version unchanged ($VERSION); skip publish and release"
+                  fi
+
+    publish:
+        name: Package, publish, and release
+        needs: check
+        if: needs.check.outputs.should_publish == 'true'
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Zip extension source
+              run: |
+                  cd src
+                  zip -r ../extension.zip .
+                  cd ..
+                  echo "Created extension.zip"
+
+            - name: Upload to Chrome Web Store
+              uses: mnao305/chrome-extension-upload@v5.0.0
+              with:
+                  file-path: extension.zip
+                  extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
+                  client-id: ${{ secrets.CHROME_CLIENT_ID }}
+                  client-secret: ${{ secrets.CHROME_CLIENT_SECRET }}
+                  refresh-token: ${{ secrets.CHROME_REFRESH_TOKEN }}
+                  publish: true
+
+            - name: Create GitHub release
+              uses: softprops/action-gh-release@v2
+              with:
+                  tag_name: v${{ needs.check.outputs.version }}
+                  name: v${{ needs.check.outputs.version }}
+                  files: extension.zip
+                  generate_release_notes: true
+                  target_commitish: ${{ github.sha }}

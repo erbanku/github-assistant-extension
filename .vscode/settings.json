@@ -1,15 +1,126 @@
 {
     "projectColorizer.workspaceColor": "#5a2aac",
-    "workbench.colorCustomizations": {
-        "titleBar.activeBackground": "#5a2aac",
-        "titleBar.activeForeground": "#FFFFFF",
-        "titleBar.inactiveBackground": "#4b2c7f",
-        "titleBar.inactiveForeground": "#FFFFFFb3"
-    },
     "chat.tools.terminal.autoApprove": {
         "/^node -c \"e:\\\\Dev\\\\GitHub\\\\github-assistant-extension\\\\src\\\\content\\.js\" ; echo \"Syntax OK\"$/": {
             "approve": true,
             "matchCommandLine": true
         }
+    },
+    "files.exclude": {
+        "**/.git": true,
+        "**/.svn": true,
+        "**/.hg": true,
+        "**/.DS_Store": true,
+        "**/Thumbs.db": true,
+        "**/.idea": true,
+        "**/.vscode": true,
+        "**/$RECYCLE.BIN": true,
+        "**/Config.Msi": true,
+        "**/pnpm-store": true,
+        "**/sync.ffs_db": true,
+        "**/.trunk/*actions/": true,
+        "**/.trunk/*logs/": true,
+        "**/.trunk/*notifications/": true,
+        "**/.trunk/*out/": true,
+        "**/.trunk/*plugins/": true
+    },
+    "hide-files.files": [ ],
+    "workbench.colorCustomizations": {
+        "terminal.ansiYellow": "#FFD700",
+        "editor.lineHighlightBackground": "#FFD700",
+        "editor.selectionBackground": "#87CEEB",
+        "editor.selectionHighlightBackground": "#32CD32",
+        "editor.wordHighlightBackground": "#ffd8b1",
+        "editorCursor.foreground": "#FF4500",
+        "[*Monokai*]": {
+            "editor.lineHighlightBackground": "#444444",
+            "editor.selectionBackground": "#264F78",
+            "editor.selectionHighlightBackground": "#3A3D41",
+            "editor.wordHighlightBackground": "#333366",
+            "editorCursor.foreground": "#FFD700"
+        },
+        "[*MacOS Modern Dark*]": {
+            "editor.lineHighlightBackground": "#444444",
+            "editor.selectionBackground": "#264F78",
+            "editor.selectionHighlightBackground": "#3A3D41FE",
+            "editor.wordHighlightBackground": "#333366FE",
+            "editorCursor.foreground": "#FFD700"
+        },
+        "[*MacOS Modern Light*]": {
+            "editor.lineHighlightBackground": "#FFD700",
+            "editor.selectionBackground": "#87CEEB",
+            "editor.selectionHighlightBackground": "#32CD32FE",
+            "editor.wordHighlightBackground": "#ffd8b1FE",
+            "editorCursor.foreground": "#FF4500"
+        },
+        "[*Orange*]": {
+            "editor.lineHighlightBackground": "#444444",
+            "editor.selectionBackground": "#264F78",
+            "editor.selectionHighlightBackground": "#3A3D41",
+            "editor.wordHighlightBackground": "#333366",
+            "editorCursor.foreground": "#FFD700"
+        },
+        "[*Civic*]": {
+            "editor.lineHighlightBackground": "#444444",
+            "editor.selectionBackground": "#264F78",
+            "editor.selectionHighlightBackground": "#3A3D41FE",
+            "editor.wordHighlightBackground": "#333366FE",
+            "editorCursor.foreground": "#FFD700"
+        },
+        "[Noctis Viola]": {
+            "editor.lineHighlightBackground": "#444444",
+            "editor.selectionBackground": "#264F78",
+            "editor.selectionHighlightBackground": "#3A3D41",
+            "editor.wordHighlightBackground": "#333366",
+            "editorCursor.foreground": "#FFD700"
+        },
+        "[*Modern Light*]": {
+            "editor.lineHighlightBackground": "#FFD700",
+            "editor.selectionBackground": "#87CEEB",
+            "editor.selectionHighlightBackground": "#32CD32FE",
+            "editor.wordHighlightBackground": "#ffd8b1FE",
+            "editorCursor.foreground": "#FF4500"
+        },
+        "[*Autumn*]": {
+            "editor.lineHighlightBackground": "#444444",
+            "editor.selectionBackground": "#264F78",
+            "editor.selectionHighlightBackground": "#3A3D41FE",
+            "editor.wordHighlightBackground": "#333366FE",
+            "editorCursor.foreground": "#FFD700"
+        },
+        "[*dark*]": {
+            "editor.lineHighlightBackground": "#222222",
+            "editor.selectionBackground": "#264F78",
+            "editor.selectionHighlightBackground": "#3A3D41FE",
+            "editor.wordHighlightBackground": "#333366FE",
+            "editorCursor.foreground": "#FFD700",
+            "icon.foreground": "#008dfa",
+            "titleBar.activeBackground": "#222831",
+            "titleBar.activeForeground": "#F7FCFE",
+            "titleBar.inactiveBackground": "#222831",
+            "titleBar.inactiveForeground": "#B0C4DE",
+            "activityBar.background": "#222831",
+            "activityBar.foreground": "#F7FCFE",
+            "activityBar.inactiveForeground": "#B0C4DE",
+            "activityBarBadge.background": "#0078AA",
+            "activityBarBadge.foreground": "#FFFFFF",
+            "statusBar.background": "#222831",
+            "statusBar.foreground": "#F7FCFE",
+            "statusBar.noFolderBackground": "#222831",
+            "statusBar.noFolderForeground": "#F7FCFE",
+            "statusBar.debuggingBackground": "#0078AA",
+            "statusBar.debuggingForeground": "#FFFFFF",
+            "sideBar.foreground": "#222831",
+            "sideBarSectionHeader.foreground": "#222831",
+            "titleBar.border": "#222831",
+            "sideBar.border": "#222831",
+            "editorGroup.border": "#222831",
+            "panel.border": "#222831",
+            "statusBar.border": "#222831",
+            "activityBar.border": "#222831"
+        },
+        "workbench.colorTheme": "MacOS Modern Dark - Ventura Xcode Default",
+        "icon.foreground": "#008dfa",
+        "terminal.background": "#00000000"
     }
 }
