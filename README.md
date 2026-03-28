@@ -11,7 +11,7 @@ https://chromewebstore.google.com/detail/github-go-to-fork/gmafgjjojobkaegbpnmkj
 -   **Import Repository**: Redirects to GitHub's import page with pre-filled repository details (URL, name, description)
 -   **Back to Upstream**: Easy navigation from your fork back to the original repository
 -   **Quick Access Links**: Customizable buttons for frequently visited GitHub destinations
--   **Raw Page Enhancement**: Navigation and copy buttons on raw.githubusercontent.com pages
+-   **Raw Page Enhancement**: Navigation and copy buttons on raw GitHub and Gist pages
 -   **Keyboard Shortcuts**: Navigate GitHub quickly with hotkeys (see below)
 -   **Smart Naming**: Automatically handles name conflicts by appending numbers (repo-1, repo-2, etc.)
 -   **Multi-account Support**: Checks all your organizations and personal accounts

@@ -890,20 +890,40 @@ function autofillImportForm() {
  * Returns: https://gist.github.com/erbanku/cd468880461ddcce95e44da10b921262#file-dify_workflows_export_en-js
  */
 function parseGistRawUrl(url) {
-    const match = url.match(
-        /gist\.githubusercontent\.com\/([^\/]+)\/([^\/]+)\/raw\/[^\/]+\/(.+)$/,
-    );
-    if (!match) return null;
+    try {
+        const parsedUrl = new URL(url);
+        const pathSegments = parsedUrl.pathname.split("/").filter(Boolean);
+        const isGistRawHost = parsedUrl.hostname === "gist.githubusercontent.com";
+        const isGistRawPath =
+            parsedUrl.hostname === "gist.github.com" &&
+            pathSegments[2] === "raw";
 
-    const username = match[1];
-    const gistId = match[2];
-    const filename = match[3];
+        if (!isGistRawHost && !isGistRawPath) {
+            return null;
+        }
 
-    // Convert filename to gist anchor format
-    // GitHub converts filenames to lowercase and replaces dots with hyphens (except extension dot becomes -)
-    const anchor = "file-" + filename.toLowerCase().replace(/\./g, "-");
+        if (pathSegments.length < 4 || pathSegments[2] !== "raw") {
+            return null;
+        }
 
-    return `https://gist.github.com/${username}/${gistId}#${anchor}`;
+        const username = pathSegments[0];
+        const gistId = pathSegments[1];
+        const rawFileSegments = pathSegments.slice(3);
+        const filename = decodeURIComponent(
+            rawFileSegments[rawFileSegments.length - 1] || "",
+        );
+
+        if (!filename) {
+            return `https://gist.github.com/${username}/${gistId}`;
+        }
+
+        // GitHub gist anchors lowercase the filename and replace dots with hyphens.
+        const anchor = "file-" + filename.toLowerCase().replace(/\./g, "-");
+
+        return `https://gist.github.com/${username}/${gistId}#${anchor}`;
+    } catch (error) {
+        return null;
+    }
 }
 
 /**
@@ -1253,10 +1273,24 @@ async function initRawPage() {
         return;
     }
 
+    if (document.readyState === "loading") {
+        await new Promise((resolve) => {
+            document.addEventListener("DOMContentLoaded", resolve, {
+                once: true,
+            });
+        });
+    }
+
     const currentUrl = location.href;
 
     // Check if we're on a gist raw page
-    if (currentUrl.includes("gist.githubusercontent.com")) {
+    if (
+        currentUrl.includes("gist.githubusercontent.com") ||
+        (
+            location.hostname === "gist.github.com" &&
+            location.pathname.includes("/raw/")
+        )
+    ) {
         const gistUrl = parseGistRawUrl(currentUrl);
         if (gistUrl) {
             console.log(
