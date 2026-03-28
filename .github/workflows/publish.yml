@@ -74,15 +74,16 @@ jobs:
 
             - name: Zip extension source
               run: |
+                  mkdir -p dist
                   cd src
-                  zip -r ../extension.zip .
+                  zip -r ../dist/extension.zip .
                   cd ..
-                  echo "Created extension.zip"
+                  echo "Created dist/extension.zip"
 
             - name: Upload to Chrome Web Store
               uses: mnao305/chrome-extension-upload@v5.0.0
               with:
-                  file-path: extension.zip
+                  file-path: dist/extension.zip
                   extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
                   client-id: ${{ secrets.CHROME_CLIENT_ID }}
                   client-secret: ${{ secrets.CHROME_CLIENT_SECRET }}
@@ -94,6 +95,6 @@ jobs:
               with:
                   tag_name: v${{ needs.check.outputs.version }}
                   name: v${{ needs.check.outputs.version }}
-                  files: extension.zip
+                  files: dist/extension.zip
                   generate_release_notes: true
                   target_commitish: ${{ github.sha }}
