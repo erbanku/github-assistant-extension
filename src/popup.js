@@ -962,13 +962,21 @@ saveBtn.addEventListener("click", async () => {
 
             // Check if token has required scopes
             const scopes = response.headers.get("X-OAuth-Scopes") || "";
+            const scopeList = scopes
+                .split(",")
+                .map((scope) => scope.trim())
+                .filter(Boolean);
             const hasPublicRepo =
-                scopes.includes("public_repo") || scopes.includes("repo");
-            const hasReadOrg = scopes.includes("read:org");
+                scopeList.includes("public_repo") || scopeList.includes("repo");
+            const hasReadOrg = scopeList.includes("read:org");
+            const hasReadPackages =
+                scopeList.includes("read:packages") ||
+                scopeList.includes("write:packages") ||
+                scopeList.includes("delete:packages");
 
-            if (!hasPublicRepo || !hasReadOrg) {
+            if (!hasPublicRepo || !hasReadOrg || !hasReadPackages) {
                 showStatus(
-                    'Token is valid but missing required permissions. Please generate a new token with "public_repo" and "read:org" scopes.',
+                    'Token is valid but missing required permissions. Please generate a new token with "repo" (or "public_repo"), "read:org", and "read:packages" scopes.',
                     "error"
                 );
                 saveBtn.textContent = "Save Token";

@@ -579,14 +579,15 @@
                 <ul>
                     <li><code>repo</code> - Full control of private repositories (needed to import repos)</li>
                     <li><code>read:org</code> - Read organization membership</li>
+                    <li><code>read:packages</code> - Read package versions/tags for packages page metadata</li>
                 </ul>
                 <div style="margin-top: 8px; font-size: 11px; color: #8b949e;">
-                    ⚠️ Use <code>repo</code> (not just <code>public_repo</code>) to enable repository imports
+                    ⚠️ Use <code>repo</code> for import features and include <code>read:packages</code> for package metadata
                 </div>
             </div>
 
             <button id="save-btn" class="btn btn-block">Save Token</button>
-            <a href="https://github.com/settings/tokens/new?scopes=repo,read:org&description=GitHub%20Assistant%20Extension%20(By%20@erbanku)"
+            <a href="https://github.com/settings/tokens/new?scopes=repo,read:org,read:packages&description=GitHub%20Assistant%20Extension%20(By%20@erbanku)"
                 target="_blank" class="btn btn-secondary btn-block">
                 Generate Token on GitHub
             </a>

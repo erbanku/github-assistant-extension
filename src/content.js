@@ -7,6 +7,14 @@ const QUICK_LINKS_STORAGE_AREA_KEY = "quickAccessLinksStorageArea";
 let quickAccessButtonsObserver = null;
 let quickAccessButtonsRaf = null;
 let quickAccessButtonsInjecting = false;
+const PACKAGE_METADATA_CLASS = "gh-assistant-package-metadata";
+const PACKAGE_METADATA_CACHE_TTL_MS = 5 * 60 * 1000;
+const PACKAGE_METADATA_ACCESS_BACKOFF_MS = 5 * 60 * 1000;
+const packageMetadataCache = new Map();
+const packageMetadataRequests = new Map();
+let packageMetadataRaf = null;
+let packageMetadataAccessBlockedUntil = 0;
+let packageMetadataAccessBlockedMessage = "";
 
 // Global flag to ensure hotkeys are only initialized once
 let hotkeysInitialized = false;
@@ -185,6 +193,10 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === "sync") {
         if (changes.githubToken) {
             cachedGithubToken = changes.githubToken.newValue || null;
+            packageMetadataCache.clear();
+            packageMetadataRequests.clear();
+            packageMetadataAccessBlockedUntil = 0;
+            packageMetadataAccessBlockedMessage = "";
             // Re-initialize to update fork/upstream/import buttons
             init();
         }
@@ -457,9 +469,856 @@ function scheduleQuickAccessButtonsInjection() {
     });
 }
 
+function isPackagesListPage() {
+    const pathname = window.location.pathname;
+    if (/^\/orgs\/[^/]+\/packages\/?$/i.test(pathname)) {
+        return true;
+    }
+
+    if (/^\/users\/[^/]+\/packages\/?$/i.test(pathname)) {
+        return true;
+    }
+
+    const query = new URLSearchParams(window.location.search);
+    return query.get("tab") === "packages" && /^\/[^/]+\/?$/.test(pathname);
+}
+
+function parsePackageInfoFromLink(link) {
+    if (!(link instanceof HTMLAnchorElement) || !link.href) {
+        return null;
+    }
+
+    const url = new URL(link.href, window.location.origin);
+    const path = url.pathname.replace(/\/+$/, "");
+
+    const orgMatch = path.match(
+        /^\/orgs\/([^/]+)\/packages\/([^/]+)\/(?:package\/)?([^/]+)(?:\/.*)?$/i
+    );
+    if (orgMatch) {
+        const owner = decodeURIComponent(orgMatch[1]);
+        const packageType = decodeURIComponent(orgMatch[2]).toLowerCase();
+        const packageName = decodeURIComponent(orgMatch[3]);
+        return {
+            ownerScope: "orgs",
+            owner,
+            packageType,
+            packageName,
+            key: `orgs:${owner}:${packageType}:${packageName}`,
+        };
+    }
+
+    const userScopeMatch = path.match(
+        /^\/users\/([^/]+)\/packages\/([^/]+)\/(?:package\/)?([^/]+)(?:\/.*)?$/i
+    );
+    if (userScopeMatch) {
+        const owner = decodeURIComponent(userScopeMatch[1]);
+        const packageType = decodeURIComponent(userScopeMatch[2]).toLowerCase();
+        const packageName = decodeURIComponent(userScopeMatch[3]);
+        return {
+            ownerScope: "users",
+            owner,
+            packageType,
+            packageName,
+            key: `users:${owner}:${packageType}:${packageName}`,
+        };
+    }
+
+    const userMatch = path.match(
+        /^\/([^/]+)\/packages\/([^/]+)\/(?:package\/)?([^/]+)(?:\/.*)?$/i
+    );
+    if (userMatch) {
+        const excludedOwners = new Set([
+            "new",
+            "settings",
+            "organizations",
+            "enterprises",
+            "team",
+            "orgs",
+            "marketplace",
+            "explore",
+            "topics",
+            "trending",
+            "collections",
+            "events",
+            "codespaces",
+            "features",
+            "sponsors",
+            "about",
+            "customer-stories",
+            "dashboard",
+            "pricing",
+            "resources",
+            "security",
+            "users",
+        ]);
+
+        const owner = decodeURIComponent(userMatch[1]);
+        if (excludedOwners.has(owner.toLowerCase())) {
+            return null;
+        }
+
+        const packageType = decodeURIComponent(userMatch[2]).toLowerCase();
+        const packageName = decodeURIComponent(userMatch[3]);
+        return {
+            ownerScope: "users",
+            owner,
+            packageType,
+            packageName,
+            key: `users:${owner}:${packageType}:${packageName}`,
+        };
+    }
+
+    return null;
+}
+
+function applyPackageMetadataNodeLayout(node) {
+    if (!node) {
+        return;
+    }
+
+    node.style.cssText = `
+        display: inline-flex;
+        flex-wrap: nowrap;
+        white-space: nowrap;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 6px;
+        margin-left: 8px;
+        margin-top: 0;
+        width: auto;
+        font-size: 12px;
+        color: #57606a;
+        vertical-align: middle;
+        float: none;
+    `;
+}
+
+function getPackageTypeCandidates(packageType) {
+    const normalizedType = String(packageType || "").toLowerCase();
+    if (!normalizedType) {
+        return [];
+    }
+
+    if (normalizedType === "container") {
+        return ["container", "docker"];
+    }
+
+    if (normalizedType === "docker") {
+        return ["docker", "container"];
+    }
+
+    return [normalizedType];
+}
+
+function createPackageApiHeaders(githubToken, useBearer = false) {
+    return {
+        Accept: "application/vnd.github+json",
+        Authorization: useBearer
+            ? `Bearer ${githubToken}`
+            : `token ${githubToken}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+    };
+}
+
+function isPackageMetadataAccessBlocked() {
+    return (
+        packageMetadataAccessBlockedUntil > Date.now() &&
+        Boolean(packageMetadataAccessBlockedMessage)
+    );
+}
+
+function blockPackageMetadataAccess(message) {
+    packageMetadataAccessBlockedUntil =
+        Date.now() + PACKAGE_METADATA_ACCESS_BACKOFF_MS;
+    packageMetadataAccessBlockedMessage = message;
+}
+
+async function readGitHubApiErrorMessage(response) {
+    try {
+        const responseData = await response.json();
+        if (
+            responseData &&
+            typeof responseData === "object" &&
+            typeof responseData.message === "string"
+        ) {
+            return responseData.message.trim();
+        }
+    } catch {
+        // Ignore JSON parse failures and fallback to status text.
+    }
+
+    return response.statusText || "";
+}
+
+async function fetchPackageMetadataApi(endpoint, githubToken) {
+    const tokenResponse = await fetch(endpoint, {
+        headers: createPackageApiHeaders(githubToken),
+    });
+
+    if (tokenResponse.status !== 401) {
+        return tokenResponse;
+    }
+
+    return fetch(endpoint, {
+        headers: createPackageApiHeaders(githubToken, true),
+    });
+}
+
+function getPackageMetadataErrorMessage(errorText) {
+    const normalizedError = String(errorText || "").toLowerCase();
+    if (
+        normalizedError.includes("read:packages") ||
+        normalizedError.includes("forbidden") ||
+        normalizedError.includes("(403)")
+    ) {
+        return "Token missing read:packages scope";
+    }
+
+    if (normalizedError.includes("rate limit")) {
+        return "GitHub API rate limit exceeded";
+    }
+
+    if (
+        normalizedError.includes("unauthorized") ||
+        normalizedError.includes("bad credentials") ||
+        normalizedError.includes("(401)")
+    ) {
+        return "Token is invalid or expired";
+    }
+
+    return "Package metadata unavailable";
+}
+
+function getPackageMetadataErrorTitle(errorText) {
+    const normalizedError = String(errorText || "").toLowerCase();
+    if (
+        normalizedError.includes("read:packages") ||
+        normalizedError.includes("forbidden") ||
+        normalizedError.includes("(403)")
+    ) {
+        return "Update your token to include read:packages, then save it again in the extension popup.";
+    }
+
+    return "Unable to fetch package metadata from GitHub API.";
+}
+
+async function runWithConcurrencyLimit(items, maxConcurrency, worker) {
+    const concurrency = Math.max(1, Math.floor(maxConcurrency || 1));
+    let index = 0;
+
+    const runners = new Array(Math.min(concurrency, items.length))
+        .fill(null)
+        .map(async () => {
+            while (index < items.length) {
+                const currentIndex = index++;
+                await worker(items[currentIndex], currentIndex);
+            }
+        });
+
+    await Promise.all(runners);
+}
+
+function extractLatestVersionTags(version) {
+    if (!version || typeof version !== "object") {
+        return [];
+    }
+
+    const containerTags =
+        version.metadata &&
+        version.metadata.container &&
+        Array.isArray(version.metadata.container.tags)
+            ? version.metadata.container.tags
+            : [];
+
+    const normalizedContainerTags = containerTags
+        .map((tag) => String(tag || "").trim())
+        .filter(Boolean);
+
+    if (normalizedContainerTags.length > 0) {
+        return normalizedContainerTags;
+    }
+
+    const fallbackVersionName =
+        typeof version.name === "string" ? version.name.trim() : "";
+    return fallbackVersionName ? [fallbackVersionName] : [];
+}
+
+function formatRelativeTime(dateString) {
+    const timestamp = Date.parse(dateString || "");
+    if (Number.isNaN(timestamp)) {
+        return "unknown";
+    }
+
+    const diffSeconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+    if (diffSeconds < 60) {
+        return "just now";
+    }
+
+    const diffMinutes = Math.floor(diffSeconds / 60);
+    if (diffMinutes < 60) {
+        return `${diffMinutes}m ago`;
+    }
+
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24) {
+        return `${diffHours}h ago`;
+    }
+
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 30) {
+        return `${diffDays}d ago`;
+    }
+
+    return new Date(timestamp).toLocaleDateString();
+}
+
+function getPackageListEntryContainer(link) {
+    return (
+        link.closest(
+            "li, article, div.Box-row, div[class*='Box-row'], div[data-testid='list-item']"
+        ) || link.parentElement
+    );
+}
+
+function parseUpdatedAtTimestamp(updatedAt) {
+    const timestamp = Date.parse(String(updatedAt || ""));
+    return Number.isNaN(timestamp) ? Number.NaN : timestamp;
+}
+
+function sortPackageListEntriesByUpdatedTime(packageTargets) {
+    if (!Array.isArray(packageTargets) || packageTargets.length === 0) {
+        return;
+    }
+
+    const groupedByParent = new Map();
+
+    packageTargets.forEach((target) => {
+        if (
+            !target ||
+            !target.listEntryContainer ||
+            !target.parentContainer ||
+            !target.parentContainer.contains(target.listEntryContainer)
+        ) {
+            return;
+        }
+
+        if (!groupedByParent.has(target.parentContainer)) {
+            groupedByParent.set(target.parentContainer, []);
+        }
+
+        groupedByParent.get(target.parentContainer).push(target);
+    });
+
+    groupedByParent.forEach((targets, parentContainer) => {
+        const sortedTargets = [...targets].sort((a, b) => {
+            const aHasTimestamp = Number.isFinite(a.updatedAtTimestamp);
+            const bHasTimestamp = Number.isFinite(b.updatedAtTimestamp);
+
+            if (aHasTimestamp && bHasTimestamp) {
+                if (a.updatedAtTimestamp !== b.updatedAtTimestamp) {
+                    return b.updatedAtTimestamp - a.updatedAtTimestamp;
+                }
+            } else if (aHasTimestamp !== bHasTimestamp) {
+                return aHasTimestamp ? -1 : 1;
+            }
+
+            return a.originalIndex - b.originalIndex;
+        });
+
+        sortedTargets.forEach((target) => {
+            parentContainer.appendChild(target.listEntryContainer);
+        });
+    });
+}
+
+function findPackageDownloadsElement(container) {
+    if (!container) {
+        return null;
+    }
+
+    const semanticCandidate = container.querySelector(
+        "[aria-label*='download' i], [title*='download' i], [data-testid*='download' i]"
+    );
+    if (semanticCandidate) {
+        return semanticCandidate;
+    }
+
+    const iconCandidate = container.querySelector("svg.octicon-download");
+    if (iconCandidate) {
+        return iconCandidate.closest("span, div");
+    }
+
+    const countCandidate = container.querySelector(
+        ".tmp-ml-3.no-wrap.flex-self-center span, .tmp-ml-3.no-wrap span, .no-wrap.flex-self-center span"
+    );
+    if (countCandidate) {
+        return countCandidate;
+    }
+
+    const textCandidates = container.querySelectorAll(
+        "span, div, li, p, strong, small"
+    );
+    for (const element of textCandidates) {
+        const textContent = String(element.textContent || "")
+            .trim()
+            .toLowerCase();
+        if (textContent.includes("download")) {
+            return element;
+        }
+    }
+
+    return null;
+}
+
+function normalizeDockerPathValue(value) {
+    return String(value || "")
+        .trim()
+        .replace(/^\/+/, "")
+        .replace(/\/+$/, "")
+        .toLowerCase();
+}
+
+function buildDockerPullCommand(packageInfo, tag) {
+    if (!packageInfo || !tag) {
+        return "";
+    }
+
+    const packageType = String(packageInfo.packageType || "").toLowerCase();
+    if (packageType !== "container" && packageType !== "docker") {
+        return "";
+    }
+
+    const owner = normalizeDockerPathValue(packageInfo.owner);
+    const packageName = normalizeDockerPathValue(packageInfo.packageName);
+    const versionTag = String(tag).trim();
+    if (!owner || !packageName || !versionTag) {
+        return "";
+    }
+
+    const scopedName = packageName.startsWith(`${owner}/`)
+        ? packageName
+        : `${owner}/${packageName}`;
+    return `docker pull ghcr.io/${scopedName}:${versionTag}`;
+}
+
+function getOrCreatePackageMetadataNode(link, packageKey) {
+    const container = getPackageListEntryContainer(link);
+    if (!container) {
+        return null;
+    }
+
+    const existingNode = Array.from(
+        container.querySelectorAll(`.${PACKAGE_METADATA_CLASS}`)
+    ).find((node) => node.dataset.packageKey === packageKey);
+
+    if (existingNode) {
+        applyPackageMetadataNodeLayout(existingNode);
+        return existingNode;
+    }
+
+    const metadataNode = document.createElement("div");
+    metadataNode.className = PACKAGE_METADATA_CLASS;
+    metadataNode.dataset.packageKey = packageKey;
+    applyPackageMetadataNodeLayout(metadataNode);
+
+    const rightColumn = container.querySelector(
+        ".tmp-ml-3.no-wrap.flex-self-center, .tmp-ml-3.no-wrap, .no-wrap.flex-self-center"
+    );
+    if (rightColumn) {
+        const rightColumnDisplay = window.getComputedStyle(rightColumn).display;
+        if (!rightColumnDisplay.includes("flex")) {
+            rightColumn.style.display = "flex";
+        }
+        rightColumn.style.alignItems = "center";
+        rightColumn.style.flexWrap = "nowrap";
+        rightColumn.style.whiteSpace = "nowrap";
+        rightColumn.style.gap = "8px";
+        rightColumn.appendChild(metadataNode);
+        return metadataNode;
+    }
+
+    const downloadsElement = findPackageDownloadsElement(container);
+    if (downloadsElement && downloadsElement.parentElement) {
+        const downloadsParent = downloadsElement.parentElement;
+        const parentDisplay = window.getComputedStyle(downloadsParent).display;
+
+        if (parentDisplay.includes("flex")) {
+            downloadsParent.appendChild(metadataNode);
+        } else {
+            downloadsElement.insertAdjacentElement("afterend", metadataNode);
+        }
+        return metadataNode;
+    }
+
+    const heading = link.closest("h1, h2, h3, h4");
+    if (heading && container.contains(heading)) {
+        heading.insertAdjacentElement("afterend", metadataNode);
+    } else {
+        link.insertAdjacentElement("afterend", metadataNode);
+    }
+
+    return metadataNode;
+}
+
+function renderPackageMetadata(node, metadata, packageInfo) {
+    if (!node) {
+        return;
+    }
+
+    node.dataset.renderState = "ready";
+    node.textContent = "";
+
+    const updatedAt = metadata.updatedAt ? String(metadata.updatedAt) : "";
+    const updatedAtTimestamp = parseUpdatedAtTimestamp(updatedAt);
+    node.dataset.updatedAtTimestamp = Number.isFinite(updatedAtTimestamp)
+        ? String(updatedAtTimestamp)
+        : "";
+    const updatedLabel = document.createElement("span");
+    updatedLabel.textContent = `Updated ${formatRelativeTime(updatedAt)}`;
+    updatedLabel.style.cssText = `
+        display: inline-flex;
+        align-items: center;
+        min-height: 22px;
+        padding: 0 10px;
+        border-radius: 999px;
+        border: 1px solid #54aeff;
+        background: #ddf4ff;
+        color: #0969da;
+        font-weight: 600;
+        font-size: 11px;
+    `;
+    if (updatedAt) {
+        updatedLabel.title = new Date(updatedAt).toLocaleString();
+    }
+    node.appendChild(updatedLabel);
+
+    const latestLabel = document.createElement("span");
+    latestLabel.textContent = "Latest";
+    latestLabel.style.cssText = `
+        display: inline-flex;
+        align-items: center;
+        min-height: 22px;
+        padding: 0 10px;
+        border-radius: 999px;
+        border: 1px solid #d4a5db;
+        background: #fbefff;
+        color: #8250df;
+        font-weight: 600;
+        font-size: 11px;
+    `;
+    node.appendChild(latestLabel);
+
+    const tagsToShow =
+        Array.isArray(metadata.latestTags) && metadata.latestTags.length > 0
+            ? metadata.latestTags
+            : ["unavailable"];
+    const maxVisibleTags = 3;
+
+    tagsToShow.slice(0, maxVisibleTags).forEach((tag) => {
+        const tagNode = document.createElement("button");
+        tagNode.type = "button";
+        tagNode.textContent = tag;
+        tagNode.style.cssText = `
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 10px;
+            min-height: 22px;
+            border: 1px solid #4ac26b;
+            border-radius: 999px;
+            background: #dcffe4;
+            color: #116329;
+            font-weight: 700;
+            font-size: 11px;
+            line-height: 18px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        `;
+        const dockerPullCommand = buildDockerPullCommand(packageInfo, tag);
+        if (dockerPullCommand) {
+            tagNode.title = `Copy command: ${dockerPullCommand}`;
+            tagNode.addEventListener("click", async (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+
+                const originalText = tagNode.textContent;
+                const originalBackground = tagNode.style.background;
+                const originalBorderColor = tagNode.style.borderColor;
+                const originalColor = tagNode.style.color;
+
+                try {
+                    await navigator.clipboard.writeText(dockerPullCommand);
+                    tagNode.textContent = "Copied";
+                    tagNode.style.background = "#0969da";
+                    tagNode.style.borderColor = "#0969da";
+                    tagNode.style.color = "#ffffff";
+                } catch (error) {
+                    tagNode.textContent = "Failed";
+                    tagNode.style.background = "#cf222e";
+                    tagNode.style.borderColor = "#cf222e";
+                    tagNode.style.color = "#ffffff";
+                }
+
+                setTimeout(() => {
+                    tagNode.textContent = originalText;
+                    tagNode.style.background = originalBackground;
+                    tagNode.style.borderColor = originalBorderColor;
+                    tagNode.style.color = originalColor;
+                }, 1400);
+            });
+        } else {
+            tagNode.disabled = true;
+            tagNode.style.cursor = "default";
+            tagNode.style.opacity = "0.8";
+            tagNode.title = "No docker pull command available for this package type";
+        }
+        node.appendChild(tagNode);
+    });
+
+    if (tagsToShow.length > maxVisibleTags) {
+        const moreNode = document.createElement("span");
+        moreNode.textContent = `+${tagsToShow.length - maxVisibleTags}`;
+        moreNode.style.fontSize = "11px";
+        moreNode.style.color = "#57606a";
+        node.appendChild(moreNode);
+    }
+}
+
+function renderPackageMetadataError(
+    node,
+    message = "Package metadata unavailable"
+) {
+    if (!node) {
+        return;
+    }
+
+    node.dataset.renderState = "error";
+    delete node.dataset.updatedAtTimestamp;
+    node.textContent = message;
+    node.style.fontSize = "12px";
+}
+
+async function fetchLatestPackageMetadataFromApi(packageInfo, githubToken) {
+    if (isPackageMetadataAccessBlocked()) {
+        throw new Error(packageMetadataAccessBlockedMessage);
+    }
+    const packageTypes = getPackageTypeCandidates(packageInfo.packageType);
+    let lastStatus = null;
+    let lastApiMessage = "";
+
+    for (const packageType of packageTypes) {
+        const endpoint =
+            `https://api.github.com/${packageInfo.ownerScope}/` +
+            `${encodeURIComponent(packageInfo.owner)}/packages/` +
+            `${encodeURIComponent(packageType)}/` +
+            `${encodeURIComponent(packageInfo.packageName)}/versions?per_page=1`;
+        const response = await fetchPackageMetadataApi(endpoint, githubToken);
+
+        if (response.ok) {
+            const versions = await response.json();
+            const latestVersion = Array.isArray(versions) ? versions[0] : null;
+            return {
+                updatedAt:
+                    latestVersion &&
+                    (latestVersion.updated_at || latestVersion.created_at),
+                latestTags: extractLatestVersionTags(latestVersion),
+            };
+        }
+
+        lastStatus = response.status;
+        lastApiMessage = await readGitHubApiErrorMessage(response);
+
+        if (response.status === 403) {
+            const message = String(lastApiMessage || "").toLowerCase().includes(
+                "rate limit"
+            )
+                ? "GitHub API rate limit exceeded (403)"
+                : "GitHub package API forbidden (403). Token likely needs read:packages.";
+            blockPackageMetadataAccess(message);
+            throw new Error(message);
+        }
+
+        if (response.status === 401) {
+            throw new Error(
+                "GitHub package API unauthorized (401). Token may be invalid or expired."
+            );
+        }
+        if (response.status !== 404) {
+            break;
+        }
+    }
+
+    throw new Error(
+        `GitHub packages API request failed${
+            lastStatus ? ` (${lastStatus})` : ""
+        }${lastApiMessage ? `: ${lastApiMessage}` : ""}`
+    );
+}
+
+async function getPackageMetadata(packageInfo) {
+    if (isPackageMetadataAccessBlocked()) {
+        return {
+            fetchedAt: Date.now(),
+            data: null,
+            error: packageMetadataAccessBlockedMessage,
+        };
+    }
+    const cachedEntry = packageMetadataCache.get(packageInfo.key);
+    if (
+        cachedEntry &&
+        Date.now() - cachedEntry.fetchedAt < PACKAGE_METADATA_CACHE_TTL_MS
+    ) {
+        return cachedEntry;
+    }
+
+    if (packageMetadataRequests.has(packageInfo.key)) {
+        return packageMetadataRequests.get(packageInfo.key);
+    }
+
+    const request = fetchLatestPackageMetadataFromApi(
+        packageInfo,
+        cachedGithubToken
+    )
+        .then((data) => {
+            const entry = {
+                fetchedAt: Date.now(),
+                data,
+                error: null,
+            };
+            packageMetadataCache.set(packageInfo.key, entry);
+            packageMetadataRequests.delete(packageInfo.key);
+            return entry;
+        })
+        .catch((error) => {
+            const entry = {
+                fetchedAt: Date.now(),
+                data: null,
+                error: error.message || "Failed to fetch package metadata",
+            };
+            packageMetadataCache.set(packageInfo.key, entry);
+            packageMetadataRequests.delete(packageInfo.key);
+            return entry;
+        });
+
+    packageMetadataRequests.set(packageInfo.key, request);
+    return request;
+}
+
+async function enhancePackagesListPageMetadata() {
+    if (!isPackagesListPage()) {
+        return;
+    }
+
+    if (cachedGithubToken === null) {
+        await loadGithubTokenCache();
+    }
+
+    if (!cachedGithubToken) {
+        return;
+    }
+
+    const packageLinks = Array.from(document.querySelectorAll('a[href*="/packages/"]'));
+    if (packageLinks.length === 0) {
+        return;
+    }
+    const packageTargets = [];
+    const seenContainers = new Set();
+
+    packageLinks.forEach((link, index) => {
+        const packageInfo = parsePackageInfoFromLink(link);
+        if (!packageInfo) {
+            return;
+        }
+
+        const listEntryContainer = getPackageListEntryContainer(link);
+        const parentContainer = listEntryContainer?.parentElement || null;
+
+        if (!listEntryContainer || !parentContainer || seenContainers.has(listEntryContainer)) {
+            return;
+        }
+
+        seenContainers.add(listEntryContainer);
+        packageTargets.push({
+            link,
+            packageInfo,
+            listEntryContainer,
+            parentContainer,
+            originalIndex: index,
+            updatedAtTimestamp: Number.NaN,
+        });
+    });
+
+    if (packageTargets.length === 0) {
+        return;
+    }
+
+    await runWithConcurrencyLimit(packageTargets, 4, async (target) => {
+        const metadataNode = getOrCreatePackageMetadataNode(
+            target.link,
+            target.packageInfo.key
+        );
+        if (!metadataNode) {
+            return;
+        }
+
+        if (metadataNode.dataset.renderState === "ready") {
+            const existingTimestamp = Number.parseInt(
+                metadataNode.dataset.updatedAtTimestamp || "",
+                10
+            );
+            if (Number.isFinite(existingTimestamp)) {
+                target.updatedAtTimestamp = existingTimestamp;
+            }
+            return;
+        }
+
+        if (metadataNode.dataset.renderState !== "loading") {
+            metadataNode.dataset.renderState = "loading";
+            delete metadataNode.dataset.updatedAtTimestamp;
+            metadataNode.textContent = "Loading package metadata...";
+        }
+
+        const metadataEntry = await getPackageMetadata(target.packageInfo);
+        if (metadataEntry.error || !metadataEntry.data) {
+            const errorMessage = getPackageMetadataErrorMessage(metadataEntry.error);
+            metadataNode.title = getPackageMetadataErrorTitle(metadataEntry.error);
+            renderPackageMetadataError(metadataNode, errorMessage);
+            return;
+        }
+
+        target.updatedAtTimestamp = parseUpdatedAtTimestamp(
+            metadataEntry.data.updatedAt
+        );
+        renderPackageMetadata(metadataNode, metadataEntry.data, target.packageInfo);
+    });
+
+    sortPackageListEntriesByUpdatedTime(packageTargets);
+}
+
+function schedulePackagesListEnhancement() {
+    if (!isPackagesListPage()) {
+        return;
+    }
+
+    if (packageMetadataRaf !== null) {
+        return;
+    }
+
+    packageMetadataRaf = requestAnimationFrame(() => {
+        packageMetadataRaf = null;
+        enhancePackagesListPageMetadata().catch((error) => {
+            console.error(
+                "GitHub Assistant: Failed to enhance packages list page:",
+                error
+            );
+        });
+    });
+}
+
 async function init() {
     // Inject quick access buttons on all GitHub pages (except raw)
     await injectQuickAccessButtons();
+    schedulePackagesListEnhancement();
 
     const parsedUrl = parseGitHubUrl(location.href);
     if (!parsedUrl) {
@@ -945,10 +1804,175 @@ function parseRepoRawUrl(url) {
     return `https://github.com/${owner}/${repo}/blob/${branch}/${filePath}`;
 }
 
+function createGithubApiHeaders() {
+    const headers = {
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    };
+
+    if (cachedGithubToken) {
+        headers.Authorization = `token ${cachedGithubToken}`;
+    }
+
+    return headers;
+}
+
+function parseGistIdentity(url) {
+    try {
+        const parsedUrl = new URL(url);
+        const pathSegments = parsedUrl.pathname.split("/").filter(Boolean);
+        if (pathSegments.length < 2) {
+            return null;
+        }
+
+        const gistId = pathSegments[1];
+        if (!gistId) {
+            return null;
+        }
+
+        let filenameHint = "";
+        if (pathSegments[2] === "raw" && pathSegments.length >= 5) {
+            filenameHint = decodeURIComponent(
+                pathSegments[pathSegments.length - 1]
+            );
+        }
+
+        return {
+            gistId,
+            filenameHint,
+        };
+    } catch (error) {
+        return null;
+    }
+}
+
+function extractFilenameFromRawUrl(rawUrl) {
+    if (!rawUrl) {
+        return "";
+    }
+
+    try {
+        const parsedUrl = new URL(rawUrl);
+        const pathSegments = parsedUrl.pathname.split("/").filter(Boolean);
+        if (pathSegments.length === 0) {
+            return "";
+        }
+        return decodeURIComponent(pathSegments[pathSegments.length - 1] || "");
+    } catch (error) {
+        return "";
+    }
+}
+
+function findPreferredGistRawLink() {
+    if (location.hash) {
+        const hashTarget = document.querySelector(location.hash);
+        const hashContainer = hashTarget?.closest("div, article, section");
+        const scopedRawLink = hashContainer?.querySelector('a[href*="/raw/"]');
+        if (scopedRawLink) {
+            return scopedRawLink;
+        }
+    }
+
+    return document.querySelector('a[href*="/raw/"]');
+}
+
+function findMatchingGistFile(files, filenameHint) {
+    const allFiles = Object.values(files || {});
+    if (allFiles.length === 0) {
+        return null;
+    }
+
+    const normalizedHint = String(filenameHint || "").trim().toLowerCase();
+    if (!normalizedHint) {
+        return allFiles[0];
+    }
+
+    const exactMatch = allFiles.find(
+        (file) =>
+            String(file.filename || "").trim().toLowerCase() === normalizedHint
+    );
+    if (exactMatch) {
+        return exactMatch;
+    }
+
+    const basenameMatch = allFiles.find((file) =>
+        String(file.filename || "")
+            .trim()
+            .toLowerCase()
+            .endsWith(`/${normalizedHint}`)
+    );
+    if (basenameMatch) {
+        return basenameMatch;
+    }
+
+    return allFiles[0];
+}
+
+async function fetchLatestGistRawUrl(gistId, filenameHint, fallbackRawUrl) {
+    const response = await fetch(
+        `https://api.github.com/gists/${encodeURIComponent(gistId)}`,
+        {
+            headers: createGithubApiHeaders(),
+        }
+    );
+
+    if (!response.ok) {
+        if (fallbackRawUrl) {
+            return fallbackRawUrl;
+        }
+        throw new Error(`Failed to fetch gist metadata (${response.status})`);
+    }
+
+    const gistData = await response.json();
+    const matchingFile = findMatchingGistFile(gistData.files, filenameHint);
+    if (matchingFile && matchingFile.raw_url) {
+        return matchingFile.raw_url;
+    }
+
+    if (fallbackRawUrl) {
+        return fallbackRawUrl;
+    }
+
+    throw new Error("Could not determine latest gist raw URL");
+}
+
+async function resolveLatestRawUrlForCurrentPage() {
+    const host = window.location.hostname;
+    if (host === "raw.githubusercontent.com") {
+        return window.location.href;
+    }
+
+    if (host !== "gist.github.com" && host !== "gist.githubusercontent.com") {
+        return "";
+    }
+
+    const gistIdentity = parseGistIdentity(window.location.href);
+    if (!gistIdentity) {
+        return "";
+    }
+
+    const preferredRawLink = findPreferredGistRawLink();
+    const fallbackRawUrl =
+        preferredRawLink?.href ||
+        (host === "gist.githubusercontent.com" ||
+        window.location.pathname.includes("/raw/")
+            ? window.location.href
+            : "");
+
+    const filenameHint =
+        gistIdentity.filenameHint || extractFilenameFromRawUrl(fallbackRawUrl);
+
+    return fetchLatestGistRawUrl(
+        gistIdentity.gistId,
+        filenameHint,
+        fallbackRawUrl
+    );
+}
+
 /**
  * Add a "Go to Gist/File" button in the upper right corner of raw pages
  */
-function addRawPageButton(targetUrl, buttonText) {
+function addRawPageButton(targetUrl, buttonText, resolveLatestRawUrl = null) {
     // Remove existing button if present
     document.getElementById("go-to-source-container")?.remove();
 
@@ -1084,8 +2108,157 @@ function addRawPageButton(targetUrl, buttonText) {
         }
     });
 
+    const copyLatestRawButton = document.createElement("button");
+    copyLatestRawButton.style.cssText = `
+        padding: 8px 16px;
+        background-color: #8250df;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+        transition: background-color 0.2s;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    `;
+    copyLatestRawButton.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M2.75 1a.75.75 0 0 0 0 1.5h5.19L6.72 3.72a.75.75 0 1 0 1.06 1.06l2.5-2.5a.75.75 0 0 0 0-1.06l-2.5-2.5A.75.75 0 1 0 6.72-.22L7.94 1H2.75Zm10.5 14a.75.75 0 0 0 0-1.5H8.06l1.22-1.22a.75.75 0 1 0-1.06-1.06l-2.5 2.5a.75.75 0 0 0 0 1.06l2.5 2.5a.75.75 0 0 0 1.06-1.06L8.06 15h5.19Z"></path>
+        </svg>
+        Copy Latest Raw
+    `;
+    copyLatestRawButton.title = "Copy latest raw file URL";
+
+    copyLatestRawButton.addEventListener("mouseover", () => {
+        copyLatestRawButton.style.backgroundColor = "#7c52cc";
+    });
+    copyLatestRawButton.addEventListener("mouseout", () => {
+        copyLatestRawButton.style.backgroundColor = "#8250df";
+    });
+
+    copyLatestRawButton.addEventListener("click", async () => {
+        if (typeof resolveLatestRawUrl !== "function") {
+            return;
+        }
+
+        const originalHtml = copyLatestRawButton.innerHTML;
+        try {
+            const latestRawUrl = await resolveLatestRawUrl();
+            if (!latestRawUrl) {
+                throw new Error("No raw URL found");
+            }
+            await navigator.clipboard.writeText(latestRawUrl);
+            copyLatestRawButton.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"></path>
+                </svg>
+                Raw URL Copied
+            `;
+            copyLatestRawButton.style.backgroundColor = "#1a7f37";
+        } catch (error) {
+            copyLatestRawButton.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M2.343 13.657A8 8 0 1 1 13.657 2.343 8 8 0 0 1 2.343 13.657ZM6.03 4.97a.751.751 0 0 0-1.042.018.751.751 0 0 0-.018 1.042L6.94 8 4.97 9.97a.749.749 0 0 0 .326 1.275.749.749 0 0 0 .734-.215L8 9.06l1.97 1.97a.749.749 0 0 0 1.275-.326.749.749 0 0 0-.215-.734L9.06 8l1.97-1.97a.749.749 0 0 0-.326-1.275.749.749 0 0 0-.734.215L8 6.94Z"></path>
+                </svg>
+                Copy Failed
+            `;
+            copyLatestRawButton.style.backgroundColor = "#cf222e";
+        }
+
+        setTimeout(() => {
+            copyLatestRawButton.innerHTML = originalHtml;
+            copyLatestRawButton.style.backgroundColor = "#8250df";
+        }, 2000);
+    });
+
     container.appendChild(button);
+    container.appendChild(copyLatestRawButton);
     container.appendChild(copyButton);
+    document.body.appendChild(container);
+}
+
+function addGistViewCopyLatestRawButton() {
+    document.getElementById("gist-copy-latest-raw-container")?.remove();
+
+    const container = document.createElement("div");
+    container.id = "gist-copy-latest-raw-container";
+    container.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+        display: flex;
+        gap: 8px;
+    `;
+
+    const button = document.createElement("button");
+    button.style.cssText = `
+        padding: 8px 16px;
+        background-color: #8250df;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+        transition: background-color 0.2s;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    `;
+    button.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M2.75 1a.75.75 0 0 0 0 1.5h5.19L6.72 3.72a.75.75 0 1 0 1.06 1.06l2.5-2.5a.75.75 0 0 0 0-1.06l-2.5-2.5A.75.75 0 1 0 6.72-.22L7.94 1H2.75Zm10.5 14a.75.75 0 0 0 0-1.5H8.06l1.22-1.22a.75.75 0 1 0-1.06-1.06l-2.5 2.5a.75.75 0 0 0 0 1.06l2.5 2.5a.75.75 0 0 0 1.06-1.06L8.06 15h5.19Z"></path>
+        </svg>
+        Copy Latest Raw
+    `;
+    button.title = "Copy latest raw file URL";
+
+    button.addEventListener("mouseover", () => {
+        button.style.backgroundColor = "#7c52cc";
+    });
+    button.addEventListener("mouseout", () => {
+        button.style.backgroundColor = "#8250df";
+    });
+
+    button.addEventListener("click", async () => {
+        const originalHtml = button.innerHTML;
+        try {
+            const latestRawUrl = await resolveLatestRawUrlForCurrentPage();
+            if (!latestRawUrl) {
+                throw new Error("No raw URL found");
+            }
+            await navigator.clipboard.writeText(latestRawUrl);
+            button.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"></path>
+                </svg>
+                Raw URL Copied
+            `;
+            button.style.backgroundColor = "#1a7f37";
+        } catch (error) {
+            button.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M2.343 13.657A8 8 0 1 1 13.657 2.343 8 8 0 0 1 2.343 13.657ZM6.03 4.97a.751.751 0 0 0-1.042.018.751.751 0 0 0-.018 1.042L6.94 8 4.97 9.97a.749.749 0 0 0 .326 1.275.749.749 0 0 0 .734-.215L8 9.06l1.97 1.97a.749.749 0 0 0 1.275-.326.749.749 0 0 0-.215-.734L9.06 8l1.97-1.97a.749.749 0 0 0-.326-1.275.749.749 0 0 0-.734.215L8 6.94Z"></path>
+                </svg>
+                Copy Failed
+            `;
+            button.style.backgroundColor = "#cf222e";
+        }
+
+        setTimeout(() => {
+            button.innerHTML = originalHtml;
+            button.style.backgroundColor = "#8250df";
+        }, 2000);
+    });
+
+    container.appendChild(button);
     document.body.appendChild(container);
 }
 
@@ -1273,6 +2446,10 @@ async function initRawPage() {
         return;
     }
 
+    if (cachedGithubToken === null) {
+        await loadGithubTokenCache();
+    }
+
     if (document.readyState === "loading") {
         await new Promise((resolve) => {
             document.addEventListener("DOMContentLoaded", resolve, {
@@ -1282,6 +2459,19 @@ async function initRawPage() {
     }
 
     const currentUrl = location.href;
+
+    // Check if we're on a gist view page and show copy latest raw button
+    if (
+        location.hostname === "gist.github.com" &&
+        !location.pathname.includes("/raw/")
+    ) {
+        const gistIdentity = parseGistIdentity(currentUrl);
+        const rawLink = findPreferredGistRawLink();
+        if (gistIdentity && rawLink) {
+            addGistViewCopyLatestRawButton();
+        }
+        return;
+    }
 
     // Check if we're on a gist raw page
     if (
@@ -1296,7 +2486,11 @@ async function initRawPage() {
             console.log(
                 "GitHub Assistant: Detected gist raw page, adding button",
             );
-            addRawPageButton(gistUrl, "Go to Gist");
+            addRawPageButton(
+                gistUrl,
+                "Go to Gist",
+                resolveLatestRawUrlForCurrentPage
+            );
 
             // Try to format JSON content
             const isJSON = formatJSONContent();
@@ -1314,7 +2508,11 @@ async function initRawPage() {
             console.log(
                 "GitHub Assistant: Detected repo raw page, adding button",
             );
-            addRawPageButton(fileUrl, "Go to File");
+            addRawPageButton(
+                fileUrl,
+                "Go to File",
+                resolveLatestRawUrlForCurrentPage
+            );
 
             // Try to format JSON content
             const isJSON = formatJSONContent();
@@ -1330,6 +2528,7 @@ async function initRawPage() {
 
 init();
 scheduleQuickAccessButtonsInjection();
+schedulePackagesListEnhancement();
 autofillImportForm();
 initRawPage();
 initHotkeys();
@@ -1354,13 +2553,21 @@ function handleNavigation() {
         document.getElementById("back-to-upstream-container")?.remove();
         document.getElementById("import-repo-container")?.remove();
         document.getElementById("github-assistant-quick-access-container")?.remove();
+        document.getElementById("go-to-source-container")?.remove();
+        document.getElementById("gist-copy-latest-raw-container")?.remove();
+        document
+            .querySelectorAll(`.${PACKAGE_METADATA_CLASS}`)
+            .forEach((node) => node.remove());
         scheduleQuickAccessButtonsInjection();
+        schedulePackagesListEnhancement();
 
         // Reinitialize immediately with minimal delay
         setTimeout(async () => {
             console.log("GitHub Assistant: Reinitializing after navigation...");
             await init();
             autofillImportForm();
+            initRawPage();
+            schedulePackagesListEnhancement();
         }, 50);
     }
 }
@@ -1382,7 +2589,10 @@ window.addEventListener("popstate", handleNavigation);
 let mutationTimeout;
 new MutationObserver(() => {
     clearTimeout(mutationTimeout);
-    mutationTimeout = setTimeout(handleNavigation, 100);
+    mutationTimeout = setTimeout(() => {
+        handleNavigation();
+        schedulePackagesListEnhancement();
+    }, 100);
 }).observe(document, { subtree: true, childList: true });
 
 async function findAllForks(currentUser, sourceOwner, sourceRepo, githubToken) {
